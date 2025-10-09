@@ -20,7 +20,7 @@ export function HowItWorksSection() {
           <Card key={s.n} className="p-6 border-border glassmorphic">
             <div className="font-mono text-primary">{s.n}</div>
             <h3 className="mt-2 text-lg font-semibold">{s.title}</h3>
-            <p className="font-mono text-sm text-foreground/60 mt-3">{s.desc}</p>
+            <p className="font-mono text-sm text-foreground/60 mt-3 text-readable">{s.desc}</p>
           </Card>
         ))}
       </div>

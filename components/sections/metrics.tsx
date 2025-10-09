@@ -18,7 +18,7 @@ export function MetricsSection() {
         {METRICS.map((m) => (
           <Card key={m.label} className="p-6 border-border glassmorphic">
             <div className="text-3xl font-sentient">{m.value}</div>
-            <p className="font-mono text-sm text-foreground/60 mt-2">{m.label}</p>
+            <p className="font-mono text-sm text-foreground/60 mt-2 text-readable">{m.label}</p>
           </Card>
         ))}
       </div>

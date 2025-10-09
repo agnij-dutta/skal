@@ -7,7 +7,7 @@ export function AboutSection() {
       <h2 className="font-sentient text-3xl sm:text-4xl md:text-5xl text-pretty">
         Shadow Protocol — where intelligence becomes liquid
       </h2>
-      <p className="font-mono text-sm sm:text-base text-foreground/60 mt-6 max-w-3xl">
+      <p className="font-mono text-sm sm:text-base text-foreground/60 mt-6 max-w-3xl text-readable">
         A privacy-preserving exchange for AI outputs. Trade signals, embeddings, and model insights without revealing
         raw data via commit–reveal proofs. Dynamic AMM pools enable price discovery, while a verifier oracle network and
         onchain reputation ensure trust and quality.

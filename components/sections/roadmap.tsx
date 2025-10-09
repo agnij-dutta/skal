@@ -39,11 +39,11 @@ export function RoadmapSection() {
           <Card key={p.tag} className="p-6 border-border glassmorphic">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="font-mono text-sm text-foreground/60">{p.tag}</div>
+                <div className="font-mono text-sm text-foreground/60 text-readable">{p.tag}</div>
                 <h3 className="text-lg font-semibold mt-1">{p.title}</h3>
               </div>
             </div>
-            <p className="font-mono text-sm text-foreground/60 mt-3">{p.desc}</p>
+            <p className="font-mono text-sm text-foreground/60 mt-3 text-readable">{p.desc}</p>
           </Card>
         ))}
       </div>

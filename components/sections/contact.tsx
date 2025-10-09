@@ -3,19 +3,16 @@
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Pill } from "@/components/pill"
-import { GL } from "@/components/gl"
-import { useState } from "react"
+import { useGL } from "@/components/gl/context"
 
 export function ContactSection() {
-  const [hovering, setHovering] = useState(false)
+  const { setHovering } = useGL()
   
   return (
-    <section id="contact" className="container py-24 relative">
-      <GL hovering={hovering} />
-      <div className="relative z-10">
+    <section id="contact" className="container py-24">
         <Pill className="mb-6">GET IN TOUCH</Pill>
         <h2 className="font-sentient text-3xl sm:text-4xl md:text-5xl">Join the waitlist</h2>
-        <p className="font-mono text-sm sm:text-base text-foreground/60 mt-6 max-w-2xl">
+        <p className="font-mono text-sm sm:text-base text-foreground/60 mt-6 max-w-2xl text-readable">
           Building an agent, protocol, or AI product? Get early access to Shadow Protocol and help define the intelligence
           liquidity layer.
         </p>
@@ -26,7 +23,6 @@ export function ContactSection() {
             </Button>
           </Link>
         </div>
-      </div>
     </section>
   )
 }

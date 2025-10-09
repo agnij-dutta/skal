@@ -1,11 +1,15 @@
+"use client"
+
 import { Perf } from "r3f-perf";
 import { Effects } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { useControls } from "leva";
 import { Particles } from "./particles";
 import { VignetteShader } from "./shaders/vignetteShader";
+import { useGL } from "./context";
 
-export const GL = ({ hovering }: { hovering: boolean }) => {
+export const GL = () => {
+  const { hovering } = useGL();
   const {
     speed,
     focus,

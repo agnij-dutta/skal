@@ -1,16 +1,14 @@
 "use client"
 
 import Link from "next/link"
-import { GL } from "./gl"
 import { Pill } from "./pill"
 import { Button } from "./ui/button"
-import { useState } from "react"
+import { useGL } from "./gl/context"
 
 export function Hero() {
-  const [hovering, setHovering] = useState(false)
+  const { setHovering } = useGL()
   return (
     <div className="flex flex-col h-svh justify-between">
-      <GL hovering={hovering} />
 
       <div className="pb-16 mt-auto text-center relative">
         <Pill className="mb-6">SHADOW PROTOCOL</Pill>
