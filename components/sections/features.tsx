@@ -35,7 +35,7 @@ export function FeaturesSection() {
       <h2 className="font-sentient text-3xl sm:text-4xl md:text-5xl">Private, verifiable intelligence exchange</h2>
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6 mt-10">
         {FEATURES.map((f) => (
-          <Card key={f.title} className="p-6 border-border">
+          <Card key={f.title} className="p-6 border-border glassmorphic">
             <h3 className="text-lg font-semibold">{f.title}</h3>
             <p className="font-mono text-sm text-foreground/60 mt-3">{f.desc}</p>
           </Card>

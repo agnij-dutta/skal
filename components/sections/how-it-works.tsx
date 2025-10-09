@@ -17,7 +17,7 @@ export function HowItWorksSection() {
       <h2 className="font-sentient text-3xl sm:text-4xl md:text-5xl">Trustless exchange lifecycle</h2>
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6 mt-10">
         {STEPS.map((s) => (
-          <Card key={s.n} className="p-6 border-border">
+          <Card key={s.n} className="p-6 border-border glassmorphic">
             <div className="font-mono text-primary">{s.n}</div>
             <h3 className="mt-2 text-lg font-semibold">{s.title}</h3>
             <p className="font-mono text-sm text-foreground/60 mt-3">{s.desc}</p>

@@ -36,7 +36,7 @@ export function RoadmapSection() {
       <h2 className="font-sentient text-3xl sm:text-4xl md:text-5xl">Build path to mainnet</h2>
       <div className="mt-10 grid gap-6">
         {PHASES.map((p) => (
-          <Card key={p.tag} className="p-6 border-border">
+          <Card key={p.tag} className="p-6 border-border glassmorphic">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="font-mono text-sm text-foreground/60">{p.tag}</div>
