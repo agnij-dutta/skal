@@ -99,48 +99,24 @@ export function WalletConnect({ className }: WalletConnectProps) {
       }
 
       // Now request account access (this will always prompt)
+      // First disconnect any existing connection to force re-approval
+      try {
+        await window.ethereum.request({
+          method: 'wallet_revokePermissions',
+          params: [{ eth_accounts: {} }],
+        })
+      } catch (e) {
+        // Ignore if no permissions to revoke
+      }
+
       const accounts = await window.ethereum.request({
         method: 'eth_requestAccounts',
       })
 
       if (accounts.length > 0) {
+        // Set connected state after successful network setup and account approval
         setIsConnected(true)
         setAddress(accounts[0])
-        
-        // Try to switch to Somnia testnet
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0xc488' }], // 50312 in hex
-          })
-        } catch (switchError: any) {
-          // If the chain doesn't exist, add it
-          if (switchError.code === 4902) {
-            try {
-              await window.ethereum.request({
-                method: 'wallet_addEthereumChain',
-                params: [{
-                  chainId: '0xc488', // 50312 in hex
-                  chainName: 'Somnia Testnet',
-                  nativeCurrency: {
-                    name: 'Somnia Test Token',
-                    symbol: 'STT',
-                    decimals: 18,
-                  },
-                  rpcUrls: ['https://dream-rpc.somnia.network/'],
-                  blockExplorerUrls: ['https://shannon-explorer.somnia.network/'],
-                }],
-              })
-            } catch (addError) {
-              console.error('Failed to add Somnia testnet:', addError)
-              toast.error('Failed to add Somnia testnet to wallet')
-            }
-          } else {
-            console.error('Failed to switch to Somnia testnet:', switchError)
-            toast.error('Failed to switch to Somnia testnet')
-          }
-        }
-        
         toast.success('Wallet connected successfully!')
         // Redirect to markets page on successful connection
         router.push('/markets')
