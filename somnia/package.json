@@ -1,0 +1,29 @@
+{
+  "name": "@shadow-protocol/contracts",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "test:coverage": "hardhat coverage",
+    "deploy:testnet": "hardhat run scripts/deploy.ts --network somniaTestnet",
+    "deploy:mainnet": "hardhat run scripts/deploy.ts --network somniaMainnet",
+    "verify:testnet": "hardhat verify --network somniaTestnet",
+    "verify:mainnet": "hardhat verify --network somniaMainnet",
+    "typechain": "typechain --target ethers-v6 --out-dir typechain-types 'artifacts/contracts/**/*.json'",
+    "clean": "hardhat clean"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@openzeppelin/contracts": "^4.9.6",
+    "@typechain/ethers-v6": "^0.5.1",
+    "@typechain/hardhat": "^9.1.0",
+    "ethers": "^6.15.0",
+    "hardhat": "^2.26.3",
+    "typechain": "^8.3.2"
+  }
+}

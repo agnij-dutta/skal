@@ -1,0 +1,11 @@
+/.next
+/node_modules
+/pnpm-lock.yaml
+somnia/artifacts
+somnia/cache
+somnia/deployments
+somnia/typechain-types
+somnia/node_modules
+backend/**/node_modules
+backend/**/.env.local
+backend/**/deployment.json

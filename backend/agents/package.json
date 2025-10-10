@@ -1,0 +1,22 @@
+{
+  "name": "shadow-agents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "dev:provider": "tsx --env-file=.env src/providerAgent.ts",
+    "dev:buyer": "tsx --env-file=.env src/buyerAgent.ts",
+    "dev:verifier": "tsx --env-file=.env src/verifierAgent.ts",
+    "dev:lp": "tsx --env-file=.env src/lpAgent.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ethers": "^6.15.0",
+    "node-fetch": "^3.3.2",
+    "tsx": "^4.19.1"
+  }
+}
+
+
