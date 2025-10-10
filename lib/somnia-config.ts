@@ -1,4 +1,4 @@
-// Simplified config without viem for now
+// Somnia Network Configuration
 export const somniaTestnet = {
   id: 50312,
   name: 'Somnia Testnet',
@@ -18,14 +18,19 @@ export const somniaTestnet = {
   blockExplorers: {
     default: {
       name: 'Shannon Explorer',
-      url: 'https://shannon-explorer.somnia.network',
+      url: 'https://shannon-explorer.somnia.network/',
+    },
+    alternative: {
+      name: 'SocialScan',
+      url: 'https://somnia-testnet.socialscan.io/',
     },
   },
   testnet: true,
+  faucet: 'https://testnet.somnia.network/',
 }
 
 export const somniaMainnet = {
-  id: 50313,
+  id: 5031,
   name: 'Somnia Mainnet',
   nativeCurrency: {
     decimals: 18,
@@ -34,10 +39,10 @@ export const somniaMainnet = {
   },
   rpcUrls: {
     default: {
-      http: ['https://rpc.somnia.network'],
+      http: ['https://api.infra.mainnet.somnia.network/'],
     },
     public: {
-      http: ['https://rpc.somnia.network'],
+      http: ['https://api.infra.mainnet.somnia.network/'],
     },
   },
   blockExplorers: {
@@ -47,6 +52,7 @@ export const somniaMainnet = {
     },
   },
   testnet: false,
+  faucet: 'https://stakely.io/faucet/somnia-somi',
 }
 
 // Contract addresses on Somnia testnet

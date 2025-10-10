@@ -165,19 +165,19 @@ export default function ReputationPage() {
   }, [providers, searchTerm, selectedCategory, sortBy])
 
   const getReputationColor = (reputation: number) => {
-    if (reputation >= 950) return 'text-green-600'
-    if (reputation >= 900) return 'text-blue-600'
-    if (reputation >= 850) return 'text-yellow-600'
-    if (reputation >= 800) return 'text-orange-600'
-    return 'text-red-600'
+    if (reputation >= 950) return 'text-green-400'
+    if (reputation >= 900) return 'text-blue-400'
+    if (reputation >= 850) return 'text-yellow-400'
+    if (reputation >= 800) return 'text-orange-400'
+    return 'text-red-400'
   }
 
   const getReputationBadge = (reputation: number) => {
-    if (reputation >= 950) return <Badge className="bg-green-100 text-green-800">Elite</Badge>
-    if (reputation >= 900) return <Badge className="bg-blue-100 text-blue-800">Expert</Badge>
-    if (reputation >= 850) return <Badge className="bg-yellow-100 text-yellow-800">Pro</Badge>
-    if (reputation >= 800) return <Badge className="bg-orange-100 text-orange-800">Rising</Badge>
-    return <Badge className="bg-gray-100 text-gray-800">New</Badge>
+    if (reputation >= 950) return <Badge className="bg-green-500/20 text-green-400 border-green-400/30">Elite</Badge>
+    if (reputation >= 900) return <Badge className="bg-blue-500/20 text-blue-400 border-blue-400/30">Expert</Badge>
+    if (reputation >= 850) return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-400/30">Pro</Badge>
+    if (reputation >= 800) return <Badge className="bg-orange-500/20 text-orange-400 border-orange-400/30">Rising</Badge>
+    return <Badge className="bg-white/20 text-white border-white/30">New</Badge>
   }
 
   return (
@@ -191,53 +191,53 @@ export default function ReputationPage() {
 
       {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card>
+        <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Providers</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">Total Providers</CardTitle>
+            <Users className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{providers.length}</div>
-            <p className="text-xs text-muted-foreground">Active agents</p>
+            <div className="text-2xl font-bold text-white">{providers.length}</div>
+            <p className="text-xs text-white/70">Active agents</p>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg Reputation</CardTitle>
-            <Shield className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">Avg Reputation</CardTitle>
+            <Shield className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-white">
               {Math.round(providers.reduce((acc, p) => acc + p.reputation, 0) / providers.length)}
             </div>
-            <p className="text-xs text-muted-foreground">Across all providers</p>
+            <p className="text-xs text-white/70">Across all providers</p>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Commits</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">Total Commits</CardTitle>
+            <Activity className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-white">
               {providers.reduce((acc, p) => acc + p.commits, 0)}
             </div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <p className="text-xs text-white/70">This month</p>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">Success Rate</CardTitle>
+            <TrendingUp className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-white">
               {Math.round(providers.reduce((acc, p) => acc + p.successRate, 0) / providers.length)}%
             </div>
-            <p className="text-xs text-muted-foreground">Average accuracy</p>
+            <p className="text-xs text-white/70">Average accuracy</p>
           </CardContent>
         </Card>
       </div>
@@ -246,10 +246,10 @@ export default function ReputationPage() {
         {/* Charts */}
         <div className="lg:col-span-2 space-y-6">
           {/* Reputation Distribution */}
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle>Reputation Distribution</CardTitle>
-              <CardDescription>Distribution of provider reputation scores</CardDescription>
+              <CardTitle className="text-white">Reputation Distribution</CardTitle>
+              <CardDescription className="text-white/80">Distribution of provider reputation scores</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-64">
@@ -275,10 +275,10 @@ export default function ReputationPage() {
           </Card>
 
           {/* Category Performance */}
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle>Category Performance</CardTitle>
-              <CardDescription>Average reputation by category</CardDescription>
+              <CardTitle className="text-white">Category Performance</CardTitle>
+              <CardDescription className="text-white/80">Average reputation by category</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-64">
@@ -299,49 +299,50 @@ export default function ReputationPage() {
         {/* Provider List */}
         <div className="space-y-6">
           {/* Search and Filters */}
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-white">
                 <Search className="h-5 w-5" />
                 Search & Filter
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="search">Search Providers</Label>
+                <Label htmlFor="search" className="text-white">Search Providers</Label>
                 <Input
                   id="search"
                   placeholder="Search by name or address..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
+                <Label htmlFor="category" className="text-white">Category</Label>
                 <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white/10 border-white/20 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Categories</SelectItem>
-                    <SelectItem value="DeFi">DeFi</SelectItem>
-                    <SelectItem value="NLP">NLP</SelectItem>
-                    <SelectItem value="Trading">Trading</SelectItem>
+                  <SelectContent className="bg-gray-900 border-white/20">
+                    <SelectItem value="all" className="text-white">All Categories</SelectItem>
+                    <SelectItem value="DeFi" className="text-white">DeFi</SelectItem>
+                    <SelectItem value="NLP" className="text-white">NLP</SelectItem>
+                    <SelectItem value="Trading" className="text-white">Trading</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="sort">Sort By</Label>
+                <Label htmlFor="sort" className="text-white">Sort By</Label>
                 <Select value={sortBy} onValueChange={setSortBy}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white/10 border-white/20 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="reputation">Reputation</SelectItem>
-                    <SelectItem value="commits">Commits</SelectItem>
-                    <SelectItem value="successRate">Success Rate</SelectItem>
+                  <SelectContent className="bg-gray-900 border-white/20">
+                    <SelectItem value="reputation" className="text-white">Reputation</SelectItem>
+                    <SelectItem value="commits" className="text-white">Commits</SelectItem>
+                    <SelectItem value="successRate" className="text-white">Success Rate</SelectItem>
                     <SelectItem value="earnings">Earnings</SelectItem>
                   </SelectContent>
                 </Select>
@@ -350,22 +351,22 @@ export default function ReputationPage() {
           </Card>
 
           {/* Top Providers */}
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle>Top Providers</CardTitle>
-              <CardDescription>Highest reputation providers</CardDescription>
+              <CardTitle className="text-white">Top Providers</CardTitle>
+              <CardDescription className="text-white/80">Highest reputation providers</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {filteredProviders.slice(0, 5).map((provider, index) => (
-                  <div key={provider.id} className="flex items-center justify-between p-3 rounded-lg border">
+                  <div key={provider.id} className="flex items-center justify-between p-3 rounded-lg border border-white/20 bg-white/5">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="font-bold text-sm">{index + 1}</span>
+                      <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                        <span className="font-bold text-sm text-white">{index + 1}</span>
                       </div>
                       <div>
-                        <p className="font-medium">{provider.name}</p>
-                        <p className="text-sm text-muted-foreground">{provider.address}</p>
+                        <p className="font-medium text-white">{provider.name}</p>
+                        <p className="text-sm text-white/70">{provider.address}</p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -383,26 +384,26 @@ export default function ReputationPage() {
       </div>
 
       {/* Detailed Provider List */}
-      <Card className="mt-8">
+      <Card className="mt-8 backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
         <CardHeader>
-          <CardTitle>All Providers</CardTitle>
-          <CardDescription>Complete list of providers with detailed metrics</CardDescription>
+          <CardTitle className="text-white">All Providers</CardTitle>
+          <CardDescription className="text-white/80">Complete list of providers with detailed metrics</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             {filteredProviders.map((provider) => (
-              <div key={provider.id} className="p-4 rounded-lg border hover:shadow-md transition-shadow">
+              <div key={provider.id} className="p-4 rounded-lg border border-white/20 bg-white/5 hover:bg-white/10 transition-all duration-300">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="font-bold">{provider.name[0]}</span>
+                    <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                      <span className="font-bold text-white">{provider.name[0]}</span>
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg">{provider.name}</h3>
-                      <p className="text-muted-foreground">{provider.address}</p>
+                      <h3 className="font-semibold text-lg text-white">{provider.name}</h3>
+                      <p className="text-white/70">{provider.address}</p>
                       <div className="flex items-center gap-2 mt-1">
                         {getReputationBadge(provider.reputation)}
-                        <Badge variant="outline">{provider.category}</Badge>
+                        <Badge variant="outline" className="bg-white/20 text-white border-white/30">{provider.category}</Badge>
                       </div>
                     </div>
                   </div>
@@ -410,26 +411,26 @@ export default function ReputationPage() {
                     <div className={`text-2xl font-bold ${getReputationColor(provider.reputation)}`}>
                       {provider.reputation}
                     </div>
-                    <p className="text-sm text-muted-foreground">Reputation</p>
+                    <p className="text-sm text-white/70">Reputation</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">Commits</p>
-                    <p className="font-semibold">{provider.commits}</p>
+                    <p className="text-sm text-white/70">Commits</p>
+                    <p className="font-semibold text-white">{provider.commits}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Success Rate</p>
-                    <p className="font-semibold text-green-600">{provider.successRate}%</p>
+                    <p className="text-sm text-white/70">Success Rate</p>
+                    <p className="font-semibold text-green-400">{provider.successRate}%</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Earnings</p>
-                    <p className="font-semibold">{provider.totalEarnings}</p>
+                    <p className="text-sm text-white/70">Earnings</p>
+                    <p className="font-semibold text-white">{provider.totalEarnings}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Joined</p>
-                    <p className="font-semibold">{new Date(provider.joinDate).toLocaleDateString()}</p>
+                    <p className="text-sm text-white/70">Joined</p>
+                    <p className="font-semibold text-white">{new Date(provider.joinDate).toLocaleDateString()}</p>
                   </div>
                 </div>
 
@@ -450,20 +451,20 @@ export default function ReputationPage() {
 
                 {/* Recent Activity */}
                 <div className="mt-4">
-                  <h4 className="font-medium mb-2">Recent Activity</h4>
+                  <h4 className="font-medium mb-2 text-white">Recent Activity</h4>
                   <div className="space-y-2">
                     {provider.recentActivity.slice(0, 3).map((activity, index) => (
                       <div key={index} className="flex items-center gap-2 text-sm">
-                        {activity.type === 'commit' && <Clock className="h-4 w-4 text-blue-500" />}
-                        {activity.type === 'verify' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                        {activity.type === 'dispute' && <AlertCircle className="h-4 w-4 text-red-500" />}
-                        <span className="capitalize">{activity.type}</span>
+                        {activity.type === 'commit' && <Clock className="h-4 w-4 text-blue-400" />}
+                        {activity.type === 'verify' && <CheckCircle className="h-4 w-4 text-green-400" />}
+                        {activity.type === 'dispute' && <AlertCircle className="h-4 w-4 text-red-400" />}
+                        <span className="capitalize text-white">{activity.type}</span>
                         {activity.score && (
-                          <Badge variant="outline" className="text-xs">
+                          <Badge variant="outline" className="text-xs bg-white/20 text-white border-white/30">
                             {activity.score}%
                           </Badge>
                         )}
-                        <span className="text-muted-foreground">{activity.timestamp}</span>
+                        <span className="text-white/70">{activity.timestamp}</span>
                       </div>
                     ))}
                   </div>

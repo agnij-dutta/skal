@@ -170,66 +170,69 @@ export default function CommitPage() {
     switch (currentStep) {
       case 0:
         return (
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle>Prepare Your AI Output</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-white">Prepare Your AI Output</CardTitle>
+              <CardDescription className="text-white/80">
                 Upload and encrypt your AI model output for secure trading
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="market">Market</Label>
+                <Label htmlFor="market" className="text-white">Market</Label>
                 <Select value={formData.marketId} onValueChange={(value) => handleInputChange('marketId', value)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white/10 border-white/20 text-white">
                     <SelectValue placeholder="Select market" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">ETH Price Prediction</SelectItem>
-                    <SelectItem value="2">DeFi Signals</SelectItem>
-                    <SelectItem value="3">NLP Embeddings</SelectItem>
+                  <SelectContent className="bg-gray-900 border-white/20">
+                    <SelectItem value="1" className="text-white">ETH Price Prediction</SelectItem>
+                    <SelectItem value="2" className="text-white">DeFi Signals</SelectItem>
+                    <SelectItem value="3" className="text-white">NLP Embeddings</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="description" className="text-white">Description</Label>
                 <Textarea
                   id="description"
                   placeholder="Describe your AI output..."
                   value={formData.description}
                   onChange={(e) => handleInputChange('description', e.target.value)}
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="outputData">AI Output Data</Label>
+                <Label htmlFor="outputData" className="text-white">AI Output Data</Label>
                 <Textarea
                   id="outputData"
                   placeholder="Paste your AI model output here (JSON, text, etc.)"
                   value={formData.outputData}
                   onChange={(e) => handleInputChange('outputData', e.target.value)}
                   rows={8}
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="stakeAmount">Stake Amount (STT)</Label>
+                <Label htmlFor="stakeAmount" className="text-white">Stake Amount (STT)</Label>
                 <Input
                   id="stakeAmount"
                   type="number"
                   step="0.01"
                   value={formData.stakeAmount}
                   onChange={(e) => handleInputChange('stakeAmount', e.target.value)}
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-white/70">
                   Minimum stake: 0.05 STT. Higher stakes increase trust and visibility.
                 </p>
               </div>
 
-              <Alert>
-                <Lock className="h-4 w-4" />
-                <AlertDescription>
+              <Alert className="bg-white/5 border-white/20">
+                <Lock className="h-4 w-4 text-white/70" />
+                <AlertDescription className="text-white/80">
                   Your data will be encrypted using XChaCha20-Poly1305 before being uploaded to IPFS.
                   Only you and verified buyers will have access to the decryption key.
                 </AlertDescription>
@@ -238,7 +241,7 @@ export default function CommitPage() {
               <Button 
                 onClick={handlePrepareOutput} 
                 disabled={isProcessing || !formData.outputData.trim()}
-                className="w-full"
+                className="w-full bg-white/20 hover:bg-white/30 text-white border-white/30"
               >
                 {isProcessing ? (
                   <>
@@ -258,32 +261,32 @@ export default function CommitPage() {
 
       case 1:
         return (
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle>Submit Commit Hash</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-white">Submit Commit Hash</CardTitle>
+              <CardDescription className="text-white/80">
                 Submit the encrypted data hash to the blockchain
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="p-4 bg-muted rounded-lg">
+              <div className="p-4 bg-white/5 rounded-lg border border-white/20">
                 <div className="flex items-center gap-2 mb-2">
-                  <Lock className="h-4 w-4" />
-                  <span className="font-medium">Commit Hash</span>
+                  <Lock className="h-4 w-4 text-white/70" />
+                  <span className="font-medium text-white">Commit Hash</span>
                 </div>
-                <code className="text-sm break-all">{commitHash}</code>
+                <code className="text-sm break-all text-white/80">{commitHash}</code>
               </div>
 
               <div className="space-y-4">
-                <div className="flex justify-between">
+                <div className="flex justify-between text-white">
                   <span>Stake Amount:</span>
                   <span className="font-medium">{formData.stakeAmount} STT</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between text-white">
                   <span>Gas Fee:</span>
                   <span className="font-medium">~0.001 STT</span>
                 </div>
-                <div className="flex justify-between font-bold">
+                <div className="flex justify-between font-bold text-white">
                   <span>Total:</span>
                   <span>{(parseFloat(formData.stakeAmount) + 0.001).toFixed(3)} STT</span>
                 </div>
@@ -292,7 +295,7 @@ export default function CommitPage() {
               <Button 
                 onClick={handleCommit} 
                 disabled={isProcessing}
-                className="w-full"
+                className="w-full bg-white/20 hover:bg-white/30 text-white border-white/30"
               >
                 {isProcessing ? (
                   <>
@@ -312,28 +315,28 @@ export default function CommitPage() {
 
       case 2:
         return (
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle>Waiting for Buyer</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-white">Waiting for Buyer</CardTitle>
+              <CardDescription className="text-white/80">
                 Your commit is live! Waiting for a buyer to lock funds.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="text-center space-y-4">
-                <div className="w-16 h-16 mx-auto bg-blue-100 rounded-full flex items-center justify-center">
-                  <Eye className="h-8 w-8 text-blue-600" />
+                <div className="w-16 h-16 mx-auto bg-blue-500/20 rounded-full flex items-center justify-center">
+                  <Eye className="h-8 w-8 text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold">Task ID: #{taskId}</h3>
-                  <p className="text-muted-foreground">Your commit is visible to buyers</p>
+                  <h3 className="font-semibold text-white">Task ID: #{taskId}</h3>
+                  <p className="text-white/70">Your commit is visible to buyers</p>
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 text-white">
                 <div className="flex justify-between">
                   <span>Commit Hash:</span>
-                  <code className="text-sm">{commitHash.slice(0, 20)}...</code>
+                  <code className="text-sm text-white/80">{commitHash.slice(0, 20)}...</code>
                 </div>
                 <div className="flex justify-between">
                   <span>Stake Amount:</span>
@@ -341,13 +344,13 @@ export default function CommitPage() {
                 </div>
                 <div className="flex justify-between">
                   <span>Status:</span>
-                  <Badge variant="outline">Waiting for Buyer</Badge>
+                  <Badge variant="outline" className="bg-white/20 text-white border-white/30">Waiting for Buyer</Badge>
                 </div>
               </div>
 
-              <Alert>
-                <Clock className="h-4 w-4" />
-                <AlertDescription>
+              <Alert className="bg-white/5 border-white/20">
+                <Clock className="h-4 w-4 text-white/70" />
+                <AlertDescription className="text-white/80">
                   You'll be notified when a buyer locks funds. You can then reveal your data.
                 </AlertDescription>
               </Alert>
@@ -357,20 +360,20 @@ export default function CommitPage() {
 
       case 3:
         return (
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle>Reveal Your Data</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-white">Reveal Your Data</CardTitle>
+              <CardDescription className="text-white/80">
                 A buyer has locked funds! Now reveal your encrypted data.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex items-center gap-2 text-green-800">
+              <div className="p-4 bg-green-500/20 border border-green-400/30 rounded-lg">
+                <div className="flex items-center gap-2 text-green-400">
                   <CheckCircle className="h-4 w-4" />
                   <span className="font-medium">Buyer Found!</span>
                 </div>
-                <p className="text-sm text-green-700 mt-1">
+                <p className="text-sm text-green-300 mt-1">
                   Funds have been locked. You can now reveal your data.
                 </p>
               </div>
@@ -378,7 +381,7 @@ export default function CommitPage() {
               <Button 
                 onClick={handleReveal} 
                 disabled={isProcessing}
-                className="w-full"
+                className="w-full bg-white/20 hover:bg-white/30 text-white border-white/30"
               >
                 {isProcessing ? (
                   <>
@@ -398,28 +401,28 @@ export default function CommitPage() {
 
       case 4:
         return (
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle>Verification in Progress</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-white">Verification in Progress</CardTitle>
+              <CardDescription className="text-white/80">
                 Your data is being verified by the network
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="text-center space-y-4">
-                <div className="w-16 h-16 mx-auto bg-orange-100 rounded-full flex items-center justify-center">
-                  <Shield className="h-8 w-8 text-orange-600" />
+                <div className="w-16 h-16 mx-auto bg-orange-500/20 rounded-full flex items-center justify-center">
+                  <Shield className="h-8 w-8 text-orange-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold">Verification in Progress</h3>
-                  <p className="text-muted-foreground">Verifiers are checking your data</p>
+                  <h3 className="font-semibold text-white">Verification in Progress</h3>
+                  <p className="text-white/70">Verifiers are checking your data</p>
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 text-white">
                 <div className="flex justify-between">
                   <span>Verification Status:</span>
-                  <Badge variant="outline">In Progress</Badge>
+                  <Badge variant="outline" className="bg-white/20 text-white border-white/30">In Progress</Badge>
                 </div>
                 <div className="flex justify-between">
                   <span>Estimated Time:</span>
@@ -427,9 +430,9 @@ export default function CommitPage() {
                 </div>
               </div>
 
-              <Alert>
-                <Clock className="h-4 w-4" />
-                <AlertDescription>
+              <Alert className="bg-white/5 border-white/20">
+                <Clock className="h-4 w-4 text-white/70" />
+                <AlertDescription className="text-white/80">
                   You'll be notified once verification is complete and funds are released.
                 </AlertDescription>
               </Alert>
@@ -439,28 +442,28 @@ export default function CommitPage() {
 
       case 5:
         return (
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle>Verification Complete!</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-white">Verification Complete!</CardTitle>
+              <CardDescription className="text-white/80">
                 Your data has been verified and payment processed
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="text-center space-y-4">
-                <div className="w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center">
-                  <CheckCircle className="h-8 w-8 text-green-600" />
+                <div className="w-16 h-16 mx-auto bg-green-500/20 rounded-full flex items-center justify-center">
+                  <CheckCircle className="h-8 w-8 text-green-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-green-800">Success!</h3>
-                  <p className="text-muted-foreground">Your data was verified and payment received</p>
+                  <h3 className="font-semibold text-green-400">Success!</h3>
+                  <p className="text-white/70">Your data was verified and payment received</p>
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 text-white">
                 <div className="flex justify-between">
                   <span>Verification Score:</span>
-                  <span className="font-medium text-green-600">98.5%</span>
+                  <span className="font-medium text-green-400">98.5%</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Payment Received:</span>
@@ -468,15 +471,15 @@ export default function CommitPage() {
                 </div>
                 <div className="flex justify-between">
                   <span>Reputation Gain:</span>
-                  <span className="font-medium text-green-600">+15</span>
+                  <span className="font-medium text-green-400">+15</span>
                 </div>
               </div>
 
               <div className="flex gap-2">
-                <Button className="flex-1" asChild>
+                <Button className="flex-1 bg-white/20 hover:bg-white/30 text-white border-white/30" asChild>
                   <a href="/markets">View Markets</a>
                 </Button>
-                <Button variant="outline" className="flex-1" asChild>
+                <Button variant="outline" className="flex-1 bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
                   <a href="/commit">Create Another</a>
                 </Button>
               </div>
@@ -501,10 +504,10 @@ export default function CommitPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Progress Steps */}
         <div className="lg:col-span-1">
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle>Commit Process</CardTitle>
-              <CardDescription>Follow these steps to commit your output</CardDescription>
+              <CardTitle className="text-white">Commit Process</CardTitle>
+              <CardDescription className="text-white/80">Follow these steps to commit your output</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -512,10 +515,10 @@ export default function CommitPage() {
                   <div key={step.id} className="flex items-start gap-3">
                     {getStepIcon(step, index)}
                     <div className="flex-1">
-                      <p className={`font-medium ${step.status === 'current' ? 'text-blue-600' : ''}`}>
+                      <p className={`font-medium ${step.status === 'current' ? 'text-blue-400' : 'text-white'}`}>
                         {step.title}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-white/70">
                         {step.description}
                       </p>
                     </div>

@@ -235,49 +235,49 @@ export default function LiquidityPage() {
 
       {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card>
+        <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Value</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">Total Value</CardTitle>
+            <DollarSign className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalValue.toFixed(2)} STT</div>
-            <p className="text-xs text-muted-foreground">In liquidity positions</p>
+            <div className="text-2xl font-bold text-white">{totalValue.toFixed(2)} STT</div>
+            <p className="text-xs text-white/70">In liquidity positions</p>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Fees Earned</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">Fees Earned</CardTitle>
+            <TrendingUp className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalFees.toFixed(3)} STT</div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <div className="text-2xl font-bold text-white">{totalFees.toFixed(3)} STT</div>
+            <p className="text-xs text-white/70">This month</p>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Positions</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">Active Positions</CardTitle>
+            <Activity className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{positions.length}</div>
-            <p className="text-xs text-muted-foreground">Liquidity positions</p>
+            <div className="text-2xl font-bold text-white">{positions.length}</div>
+            <p className="text-xs text-white/70">Liquidity positions</p>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Avg APY</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">Avg APY</CardTitle>
+            <BarChart3 className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold text-white">
               {positions.length > 0 ? (positions.reduce((acc, pos) => acc + pos.apy, 0) / positions.length).toFixed(1) : 0}%
             </div>
-            <p className="text-xs text-muted-foreground">Across all positions</p>
+            <p className="text-xs text-white/70">Across all positions</p>
           </CardContent>
         </Card>
       </div>
@@ -293,57 +293,57 @@ export default function LiquidityPage() {
           {positions.length > 0 ? (
             <div className="space-y-4">
               {positions.map((position) => (
-                <Card key={position.id} className="hover:shadow-lg transition-shadow">
+                <Card key={position.id} className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl hover:shadow-2xl hover:bg-white/15 transition-all duration-300">
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between mb-4">
                       <div>
-                        <h3 className="font-semibold text-lg">{position.marketName}</h3>
-                        <p className="text-muted-foreground">
+                        <h3 className="font-semibold text-lg text-white">{position.marketName}</h3>
+                        <p className="text-white/80">
                           {position.tokenA}/{position.tokenB} • {position.share.toFixed(1)}% share
                         </p>
                       </div>
-                      <Badge variant={position.status === 'active' ? 'default' : 'secondary'}>
+                      <Badge variant={position.status === 'active' ? 'default' : 'secondary'} className="bg-white/20 text-white border-white/30">
                         {position.status}
                       </Badge>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div>
-                        <p className="text-sm text-muted-foreground">Amount A</p>
-                        <p className="font-semibold">{position.amountA} {position.tokenA}</p>
+                        <p className="text-sm text-white/70">Amount A</p>
+                        <p className="font-semibold text-white">{position.amountA} {position.tokenA}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Amount B</p>
-                        <p className="font-semibold">{position.amountB} {position.tokenB}</p>
+                        <p className="text-sm text-white/70">Amount B</p>
+                        <p className="font-semibold text-white">{position.amountB} {position.tokenB}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">LP Tokens</p>
-                        <p className="font-semibold">{position.lpTokens}</p>
+                        <p className="text-sm text-white/70">LP Tokens</p>
+                        <p className="font-semibold text-white">{position.lpTokens}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">APY</p>
-                        <p className="font-semibold text-green-600">{position.apy.toFixed(1)}%</p>
+                        <p className="text-sm text-white/70">APY</p>
+                        <p className="font-semibold text-green-400">{position.apy.toFixed(1)}%</p>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
                       <div>
-                        <p className="text-sm text-muted-foreground">Fees Earned</p>
-                        <p className="font-semibold">{position.feesEarned} STT</p>
+                        <p className="text-sm text-white/70">Fees Earned</p>
+                        <p className="font-semibold text-white">{position.feesEarned} STT</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Created</p>
-                        <p className="font-semibold">{new Date(position.createdAt).toLocaleDateString()}</p>
+                        <p className="text-sm text-white/70">Created</p>
+                        <p className="font-semibold text-white">{new Date(position.createdAt).toLocaleDateString()}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Status</p>
+                        <p className="text-sm text-white/70">Status</p>
                         <div className="flex items-center gap-1">
                           {position.status === 'active' ? (
-                            <CheckCircle className="h-4 w-4 text-green-500" />
+                            <CheckCircle className="h-4 w-4 text-green-400" />
                           ) : (
-                            <AlertCircle className="h-4 w-4 text-red-500" />
+                            <AlertCircle className="h-4 w-4 text-red-400" />
                           )}
-                          <span className="text-sm capitalize">{position.status}</span>
+                          <span className="text-sm capitalize text-white">{position.status}</span>
                         </div>
                       </div>
                     </div>
@@ -353,11 +353,12 @@ export default function LiquidityPage() {
                         variant="outline" 
                         onClick={() => handleRemoveLiquidity(position.id)}
                         disabled={isRemoving}
+                        className="bg-white/10 hover:bg-white/20 text-white border-white/30"
                       >
                         <Minus className="h-4 w-4 mr-2" />
                         Remove
                       </Button>
-                      <Button variant="outline">
+                      <Button variant="outline" className="bg-white/10 hover:bg-white/20 text-white border-white/30">
                         <BarChart3 className="h-4 w-4 mr-2" />
                         View Details
                       </Button>
@@ -367,14 +368,14 @@ export default function LiquidityPage() {
               ))}
             </div>
           ) : (
-            <Card>
+            <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
               <CardContent className="text-center py-12">
-                <PieChart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="font-semibold mb-2">No Liquidity Positions</h3>
-                <p className="text-muted-foreground mb-4">
+                <PieChart className="h-12 w-12 mx-auto text-white/70 mb-4" />
+                <h3 className="font-semibold mb-2 text-white">No Liquidity Positions</h3>
+                <p className="text-white/80 mb-4">
                   Start earning fees by providing liquidity to markets
                 </p>
-                <Button asChild>
+                <Button asChild className="bg-white/20 hover:bg-white/30 text-white border-white/30">
                   <a href="#add">Add Liquidity</a>
                 </Button>
               </CardContent>
@@ -385,35 +386,35 @@ export default function LiquidityPage() {
         <TabsContent value="markets" className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {markets.map((market) => (
-              <Card key={market.id} className="hover:shadow-lg transition-shadow">
+              <Card key={market.id} className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl hover:shadow-2xl hover:bg-white/15 transition-all duration-300">
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div>
-                      <CardTitle className="text-lg">{market.name}</CardTitle>
-                      <CardDescription>Market #{market.id}</CardDescription>
+                      <CardTitle className="text-lg text-white">{market.name}</CardTitle>
+                      <CardDescription className="text-white/80">Market #{market.id}</CardDescription>
                     </div>
-                    <Badge variant="outline" className={market.change24h >= 0 ? 'text-green-600' : 'text-red-600'}>
+                    <Badge variant="outline" className={`bg-white/20 text-white border-white/30 ${market.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                       {market.change24h >= 0 ? '+' : ''}{market.change24h}%
                     </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Total Liquidity</span>
+                    <div className="flex justify-between text-white">
+                      <span className="text-sm text-white/70">Total Liquidity</span>
                       <span className="font-semibold">{market.totalLiquidity}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">24h Volume</span>
+                    <div className="flex justify-between text-white">
+                      <span className="text-sm text-white/70">24h Volume</span>
                       <span className="font-semibold">{market.volume24h}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">24h Fees</span>
+                    <div className="flex justify-between text-white">
+                      <span className="text-sm text-white/70">24h Fees</span>
                       <span className="font-semibold">{market.fees24h}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">APY</span>
-                      <span className="font-semibold text-green-600">{market.apy.toFixed(1)}%</span>
+                    <div className="flex justify-between text-white">
+                      <span className="text-sm text-white/70">APY</span>
+                      <span className="font-semibold text-green-400">{market.apy.toFixed(1)}%</span>
                     </div>
                   </div>
 

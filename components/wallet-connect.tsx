@@ -78,7 +78,7 @@ export function WalletConnect({ className }: WalletConnectProps) {
               await window.ethereum.request({
                 method: 'wallet_addEthereumChain',
                 params: [{
-                  chainId: '0xC468',
+                  chainId: '0xC468', // 50312 in hex
                   chainName: 'Somnia Testnet',
                   nativeCurrency: {
                     name: 'Somnia Test Token',
@@ -86,7 +86,7 @@ export function WalletConnect({ className }: WalletConnectProps) {
                     decimals: 18,
                   },
                   rpcUrls: ['https://dream-rpc.somnia.network/'],
-                  blockExplorerUrls: ['https://shannon-explorer.somnia.network'],
+                  blockExplorerUrls: ['https://shannon-explorer.somnia.network/'],
                 }],
               })
             } catch (addError) {

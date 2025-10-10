@@ -215,52 +215,52 @@ export default function SignalsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Filters Sidebar */}
         <div className="lg:col-span-1">
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-white">
                 <Filter className="h-5 w-5" />
                 Filters
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
+                <Label htmlFor="category" className="text-white">Category</Label>
                 <Select 
                   value={filters.category} 
                   onValueChange={(value) => setFilters(prev => ({ ...prev, category: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white/10 border-white/20 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Categories</SelectItem>
-                    <SelectItem value="DeFi">DeFi</SelectItem>
-                    <SelectItem value="NLP">NLP</SelectItem>
-                    <SelectItem value="Trading">Trading</SelectItem>
+                  <SelectContent className="bg-gray-900 border-white/20">
+                    <SelectItem value="all" className="text-white">All Categories</SelectItem>
+                    <SelectItem value="DeFi" className="text-white">DeFi</SelectItem>
+                    <SelectItem value="NLP" className="text-white">NLP</SelectItem>
+                    <SelectItem value="Trading" className="text-white">Trading</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
+                <Label htmlFor="status" className="text-white">Status</Label>
                 <Select 
                   value={filters.status} 
                   onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white/10 border-white/20 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="available">Available</SelectItem>
-                    <SelectItem value="verified">Verified</SelectItem>
-                    <SelectItem value="settled">Settled</SelectItem>
+                  <SelectContent className="bg-gray-900 border-white/20">
+                    <SelectItem value="all" className="text-white">All Status</SelectItem>
+                    <SelectItem value="available" className="text-white">Available</SelectItem>
+                    <SelectItem value="verified" className="text-white">Verified</SelectItem>
+                    <SelectItem value="settled" className="text-white">Settled</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="minReputation">Min Reputation</Label>
+                <Label htmlFor="minReputation" className="text-white">Min Reputation</Label>
                 <Input
                   id="minReputation"
                   type="number"
@@ -268,11 +268,12 @@ export default function SignalsPage() {
                   max="1000"
                   value={filters.minReputation}
                   onChange={(e) => setFilters(prev => ({ ...prev, minReputation: e.target.value }))}
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="maxPrice">Max Price (STT)</Label>
+                <Label htmlFor="maxPrice" className="text-white">Max Price (STT)</Label>
                 <Input
                   id="maxPrice"
                   type="number"
@@ -280,6 +281,7 @@ export default function SignalsPage() {
                   step="0.01"
                   value={filters.maxPrice}
                   onChange={(e) => setFilters(prev => ({ ...prev, maxPrice: e.target.value }))}
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
               </div>
             </CardContent>
@@ -297,57 +299,57 @@ export default function SignalsPage() {
 
             <TabsContent value="available" className="space-y-4">
               {filteredSignals.filter(s => s.status === 'available').map((signal) => (
-                <Card key={signal.id} className="hover:shadow-lg transition-shadow">
+                <Card key={signal.id} className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl hover:shadow-2xl hover:bg-white/15 transition-all duration-300">
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold text-lg">{signal.marketName}</h3>
+                          <h3 className="font-semibold text-lg text-white">{signal.marketName}</h3>
                           {getStatusBadge(signal.status)}
                         </div>
-                        <p className="text-muted-foreground mb-2">{signal.description}</p>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <p className="text-white/80 mb-2">{signal.description}</p>
+                        <div className="flex items-center gap-4 text-sm text-white/70">
                           <span>Task #{signal.taskId}</span>
                           <span>•</span>
                           <span>{signal.commitTime}</span>
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="text-2xl font-bold">{signal.price}</div>
-                        <div className="text-sm text-muted-foreground">per signal</div>
+                        <div className="text-2xl font-bold text-white">{signal.price}</div>
+                        <div className="text-sm text-white/70">per signal</div>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div>
-                        <p className="text-sm text-muted-foreground">Provider</p>
-                        <p className="font-medium">{signal.provider}</p>
+                        <p className="text-sm text-white/70">Provider</p>
+                        <p className="font-medium text-white">{signal.provider}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Reputation</p>
+                        <p className="text-sm text-white/70">Reputation</p>
                         <p className={`font-medium ${getReputationColor(signal.providerReputation)}`}>
                           {signal.providerReputation}
                         </p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Stake</p>
-                        <p className="font-medium">{signal.stake}</p>
+                        <p className="text-sm text-white/70">Stake</p>
+                        <p className="font-medium text-white">{signal.stake}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Category</p>
-                        <p className="font-medium">{signal.category}</p>
+                        <p className="text-sm text-white/70">Category</p>
+                        <p className="font-medium text-white">{signal.category}</p>
                       </div>
                     </div>
 
                     <div className="flex gap-2">
                       <Button 
                         onClick={() => setSelectedSignal(signal)}
-                        className="flex-1"
+                        className="flex-1 bg-white/20 hover:bg-white/30 text-white border-white/30"
                       >
                         <ShoppingCart className="h-4 w-4 mr-2" />
                         Buy Signal
                       </Button>
-                      <Button variant="outline" asChild>
+                      <Button variant="outline" className="bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
                         <Link href={`/markets/${signal.marketId}`}>
                           <Eye className="h-4 w-4 mr-2" />
                           View Market
@@ -373,11 +375,11 @@ export default function SignalsPage() {
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold text-lg">{signal.marketName}</h3>
+                          <h3 className="font-semibold text-lg text-white">{signal.marketName}</h3>
                           {getStatusBadge(signal.status)}
                         </div>
-                        <p className="text-muted-foreground mb-2">{signal.description}</p>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <p className="text-white/80 mb-2">{signal.description}</p>
+                        <div className="flex items-center gap-4 text-sm text-white/70">
                           <span>Task #{signal.taskId}</span>
                           <span>•</span>
                           <span>{signal.commitTime}</span>
@@ -391,11 +393,11 @@ export default function SignalsPage() {
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div>
-                        <p className="text-sm text-muted-foreground">Provider</p>
-                        <p className="font-medium">{signal.provider}</p>
+                        <p className="text-sm text-white/70">Provider</p>
+                        <p className="font-medium text-white">{signal.provider}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Reputation</p>
+                        <p className="text-sm text-white/70">Reputation</p>
                         <p className={`font-medium ${getReputationColor(signal.providerReputation)}`}>
                           {signal.providerReputation}
                         </p>
@@ -405,8 +407,8 @@ export default function SignalsPage() {
                         <p className="font-medium text-green-600">{signal.verificationScore}%</p>
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Category</p>
-                        <p className="font-medium">{signal.category}</p>
+                        <p className="text-sm text-white/70">Category</p>
+                        <p className="font-medium text-white">{signal.category}</p>
                       </div>
                     </div>
 

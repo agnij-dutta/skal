@@ -141,50 +141,50 @@ export default function MarketDetailPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card>
+        <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Current Price</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">Current Price</CardTitle>
+            <DollarSign className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{market.price}</div>
-            <div className={`flex items-center text-xs ${market.change24h >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className="text-2xl font-bold text-white">{market.price}</div>
+            <div className={`flex items-center text-xs ${market.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               {market.change24h >= 0 ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <ArrowDownRight className="h-3 w-3 mr-1" />}
               {market.change24h >= 0 ? '+' : ''}{market.change24h}%
             </div>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Liquidity</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">Liquidity</CardTitle>
+            <TrendingUp className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{market.liquidity}</div>
-            <p className="text-xs text-muted-foreground">Available for trading</p>
+            <div className="text-2xl font-bold text-white">{market.liquidity}</div>
+            <p className="text-xs text-white/70">Available for trading</p>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">24h Volume</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">24h Volume</CardTitle>
+            <Activity className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{market.volume24h}</div>
-            <p className="text-xs text-muted-foreground">Trading activity</p>
+            <div className="text-2xl font-bold text-white">{market.volume24h}</div>
+            <p className="text-xs text-white/70">Trading activity</p>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Providers</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">Providers</CardTitle>
+            <Users className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{market.providers}</div>
-            <p className="text-xs text-muted-foreground">Active agents</p>
+            <div className="text-2xl font-bold text-white">{market.providers}</div>
+            <p className="text-xs text-white/70">Active agents</p>
           </CardContent>
         </Card>
       </div>
@@ -201,23 +201,23 @@ export default function MarketDetailPage() {
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Quick Actions */}
-            <Card>
+            <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
               <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-                <CardDescription>Interact with this market</CardDescription>
+                <CardTitle className="text-white">Quick Actions</CardTitle>
+                <CardDescription className="text-white/80">Interact with this market</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Button className="w-full" asChild>
+                <Button className="w-full bg-white/20 hover:bg-white/30 text-white border-white/30" asChild>
                   <Link href={`/signals?market=${market.id}`}>
                     Buy Signal
                   </Link>
                 </Button>
-                <Button variant="outline" className="w-full" asChild>
+                <Button variant="outline" className="w-full bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
                   <Link href={`/commit?market=${market.id}`}>
                     Commit Output
                   </Link>
                 </Button>
-                <Button variant="outline" className="w-full" asChild>
+                <Button variant="outline" className="w-full bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
                   <Link href={`/liquidity?market=${market.id}`}>
                     Provide Liquidity
                   </Link>
@@ -226,27 +226,27 @@ export default function MarketDetailPage() {
             </Card>
 
             {/* Market Info */}
-            <Card>
+            <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
               <CardHeader>
-                <CardTitle>Market Information</CardTitle>
-                <CardDescription>Key details about this market</CardDescription>
+                <CardTitle className="text-white">Market Information</CardTitle>
+                <CardDescription className="text-white/80">Key details about this market</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Total Commits</span>
+                  <div className="flex justify-between text-white">
+                    <span className="text-sm text-white/70">Total Commits</span>
                     <span className="font-medium">{market.commits}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Success Rate</span>
+                  <div className="flex justify-between text-white">
+                    <span className="text-sm text-white/70">Success Rate</span>
                     <span className="font-medium">96.8%</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Avg. Verification Time</span>
+                  <div className="flex justify-between text-white">
+                    <span className="text-sm text-white/70">Avg. Verification Time</span>
                     <span className="font-medium">2.3s</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Dispute Rate</span>
+                  <div className="flex justify-between text-white">
+                    <span className="text-sm text-white/70">Dispute Rate</span>
                     <span className="font-medium">1.2%</span>
                   </div>
                 </div>
@@ -256,10 +256,10 @@ export default function MarketDetailPage() {
         </TabsContent>
 
         <TabsContent value="bonding-curve" className="space-y-6">
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle>Bonding Curve</CardTitle>
-              <CardDescription>Price discovery mechanism for this market</CardDescription>
+              <CardTitle className="text-white">Bonding Curve</CardTitle>
+              <CardDescription className="text-white/80">Price discovery mechanism for this market</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-96">
@@ -289,10 +289,10 @@ export default function MarketDetailPage() {
         </TabsContent>
 
         <TabsContent value="activity" className="space-y-6">
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-              <CardDescription>Latest transactions and events</CardDescription>
+              <CardTitle className="text-white">Recent Activity</CardTitle>
+              <CardDescription className="text-white/80">Latest transactions and events</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
