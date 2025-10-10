@@ -445,26 +445,26 @@ export default function LiquidityPage() {
         </TabsContent>
 
         <TabsContent value="add" className="space-y-6">
-          <Card>
+          <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle>Add Liquidity</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-white">Add Liquidity</CardTitle>
+              <CardDescription className="text-white/80">
                 Provide liquidity to earn trading fees from market activity
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="market">Select Market</Label>
+                <Label htmlFor="market" className="text-white">Select Market</Label>
                 <Select 
                   value={addLiquidity.marketId} 
                   onValueChange={(value) => setAddLiquidity(prev => ({ ...prev, marketId: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-white/10 border-white/20 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-gray-900 border-white/20">
                     {markets.map((market) => (
-                      <SelectItem key={market.id} value={market.id.toString()}>
+                      <SelectItem key={market.id} value={market.id.toString()} className="text-white">
                         {market.name}
                       </SelectItem>
                     ))}
@@ -474,7 +474,7 @@ export default function LiquidityPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="amountA">STT Amount</Label>
+                  <Label htmlFor="amountA" className="text-white">STT Amount</Label>
                   <Input
                     id="amountA"
                     type="number"
@@ -482,10 +482,11 @@ export default function LiquidityPage() {
                     value={addLiquidity.amountA}
                     onChange={(e) => setAddLiquidity(prev => ({ ...prev, amountA: e.target.value }))}
                     placeholder="0.0"
+                    className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="amountB">ETH Amount</Label>
+                  <Label htmlFor="amountB" className="text-white">ETH Amount</Label>
                   <Input
                     id="amountB"
                     type="number"
@@ -493,37 +494,38 @@ export default function LiquidityPage() {
                     value={addLiquidity.amountB}
                     onChange={(e) => setAddLiquidity(prev => ({ ...prev, amountB: e.target.value }))}
                     placeholder="0.0"
+                    className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                   />
                 </div>
               </div>
 
               {selectedMarket && (
-                <div className="p-4 bg-muted rounded-lg space-y-2">
-                  <h4 className="font-medium">Market Information</h4>
+                <div className="p-4 bg-white/5 rounded-lg space-y-2 border border-white/20">
+                  <h4 className="font-medium text-white">Market Information</h4>
                   <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Current Price:</span>
+                    <div className="text-white">
+                      <span className="text-white/70">Current Price:</span>
                       <span className="ml-2 font-medium">{selectedMarket.price}</span>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">APY:</span>
-                      <span className="ml-2 font-medium text-green-600">{selectedMarket.apy.toFixed(1)}%</span>
+                    <div className="text-white">
+                      <span className="text-white/70">APY:</span>
+                      <span className="ml-2 font-medium text-green-400">{selectedMarket.apy.toFixed(1)}%</span>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">Total Liquidity:</span>
+                    <div className="text-white">
+                      <span className="text-white/70">Total Liquidity:</span>
                       <span className="ml-2 font-medium">{selectedMarket.totalLiquidity}</span>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">24h Fees:</span>
+                    <div className="text-white">
+                      <span className="text-white/70">24h Fees:</span>
                       <span className="ml-2 font-medium">{selectedMarket.fees24h}</span>
                     </div>
                   </div>
                 </div>
               )}
 
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
+              <Alert className="bg-white/5 border-white/20">
+                <AlertCircle className="h-4 w-4 text-white/70" />
+                <AlertDescription className="text-white/80">
                   Providing liquidity involves risk. You may experience impermanent loss if token prices change significantly.
                 </AlertDescription>
               </Alert>
@@ -531,7 +533,7 @@ export default function LiquidityPage() {
               <Button 
                 onClick={handleAddLiquidity} 
                 disabled={isAdding || !addLiquidity.amountA || !addLiquidity.amountB}
-                className="w-full"
+                className="w-full bg-white/20 hover:bg-white/30 text-white border-white/30"
               >
                 {isAdding ? (
                   <>

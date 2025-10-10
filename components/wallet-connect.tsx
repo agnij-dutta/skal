@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from './ui/button'
 import { Wallet, LogOut, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
@@ -10,6 +11,7 @@ interface WalletConnectProps {
 }
 
 export function WalletConnect({ className }: WalletConnectProps) {
+  const router = useRouter()
   const [isConnected, setIsConnected] = useState(false)
   const [address, setAddress] = useState('')
   const [isConnecting, setIsConnecting] = useState(false)
@@ -42,10 +44,12 @@ export function WalletConnect({ className }: WalletConnectProps) {
         } else {
           setIsConnected(false)
           setAddress('')
+          // Redirect to landing page on disconnect
+          router.push('/')
         }
       })
     }
-  }, [])
+  }, [router])
 
   const connectWallet = async () => {
     if (!window.ethereum) {
@@ -100,6 +104,8 @@ export function WalletConnect({ className }: WalletConnectProps) {
         }
         
         toast.success('Wallet connected successfully!')
+        // Redirect to markets page on successful connection
+        router.push('/markets')
       }
     } catch (error) {
       console.error('Failed to connect wallet:', error)
@@ -113,6 +119,8 @@ export function WalletConnect({ className }: WalletConnectProps) {
     setIsConnected(false)
     setAddress('')
     toast.success('Wallet disconnected')
+    // Redirect to landing page on disconnect
+    router.push('/')
   }
 
   const copyAddress = async () => {
