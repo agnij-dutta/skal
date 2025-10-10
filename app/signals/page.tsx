@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -101,7 +101,7 @@ const mockSignals: Signal[] = [
   }
 ]
 
-export default function SignalsPage() {
+function SignalsContent() {
   const searchParams = useSearchParams()
   const marketFilter = searchParams.get('market')
   
@@ -430,7 +430,7 @@ export default function SignalsPage() {
             <TabsContent value="my-signals" className="space-y-4">
               <div className="text-center py-12">
                 <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">You haven't purchased any signals yet</p>
+                <p className="text-muted-foreground">You haven&apos;t purchased any signals yet</p>
                 <Button className="mt-4" asChild>
                   <Link href="/signals">Browse Signals</Link>
                 </Button>
@@ -509,5 +509,13 @@ export default function SignalsPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function SignalsPage() {
+  return (
+    <Suspense fallback={<div className="container mx-auto px-4 pt-24 pb-8">Loading...</div>}>
+      <SignalsContent />
+    </Suspense>
   )
 }

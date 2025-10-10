@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { 
   Upload, 
@@ -17,11 +16,10 @@ import {
   Eye, 
   CheckCircle, 
   Clock, 
-  AlertCircle,
-  DollarSign,
   Shield
 } from 'lucide-react'
 import { toast } from 'sonner'
+import Link from 'next/link'
 
 interface CommitStep {
   id: string
@@ -69,7 +67,7 @@ const steps: CommitStep[] = [
   }
 ]
 
-export default function CommitPage() {
+function CommitContent() {
   const searchParams = useSearchParams()
   const marketId = searchParams.get('market')
   
@@ -351,7 +349,7 @@ export default function CommitPage() {
               <Alert className="bg-white/5 border-white/20">
                 <Clock className="h-4 w-4 text-white/70" />
                 <AlertDescription className="text-white/80">
-                  You'll be notified when a buyer locks funds. You can then reveal your data.
+                  You&apos;ll be notified when a buyer locks funds. You can then reveal your data.
                 </AlertDescription>
               </Alert>
             </CardContent>
@@ -433,7 +431,7 @@ export default function CommitPage() {
               <Alert className="bg-white/5 border-white/20">
                 <Clock className="h-4 w-4 text-white/70" />
                 <AlertDescription className="text-white/80">
-                  You'll be notified once verification is complete and funds are released.
+                  You&apos;ll be notified once verification is complete and funds are released.
                 </AlertDescription>
               </Alert>
             </CardContent>
@@ -477,10 +475,10 @@ export default function CommitPage() {
 
               <div className="flex gap-2">
                 <Button className="flex-1 bg-white/20 hover:bg-white/30 text-white border-white/30" asChild>
-                  <a href="/markets">View Markets</a>
+                  <Link href="/markets">View Markets</Link>
                 </Button>
                 <Button variant="outline" className="flex-1 bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
-                  <a href="/commit">Create Another</a>
+                  <Link href="/commit">Create Another</Link>
                 </Button>
               </div>
             </CardContent>
@@ -535,5 +533,13 @@ export default function CommitPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function CommitPage() {
+  return (
+    <Suspense fallback={<div className="container mx-auto px-4 pt-24 pb-8">Loading...</div>}>
+      <CommitContent />
+    </Suspense>
   )
 }

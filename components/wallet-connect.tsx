@@ -76,9 +76,9 @@ export function WalletConnect({ className }: WalletConnectProps) {
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: '0xc488' }], // 50312 in hex
         })
-      } catch (switchError: any) {
+        } catch (switchError: unknown) {
         // If the chain doesn't exist, add it
-        if (switchError.code === 4902) {
+        if (switchError && typeof switchError === 'object' && 'code' in switchError && switchError.code === 4902) {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
             params: [{
@@ -190,7 +190,7 @@ export function WalletConnect({ className }: WalletConnectProps) {
 declare global {
   interface Window {
     ethereum?: {
-      request: (args: { method: string; params?: any[] }) => Promise<any>
+      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>
       on: (event: string, callback: (accounts: string[]) => void) => void
       selectedAddress?: string
     }

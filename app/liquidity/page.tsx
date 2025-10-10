@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,11 +9,9 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Progress } from '@/components/ui/progress'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { 
   TrendingUp, 
-  TrendingDown,
   DollarSign, 
   Activity, 
   Plus,
@@ -24,7 +22,7 @@ import {
   CheckCircle,
   AlertCircle
 } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
+import { ResponsiveContainer, AreaChart, Area } from 'recharts'
 import { toast } from 'sonner'
 
 interface LiquidityPosition {
@@ -140,7 +138,7 @@ const mockMarkets: MarketLiquidity[] = [
   }
 ]
 
-export default function LiquidityPage() {
+function LiquidityContent() {
   const searchParams = useSearchParams()
   const marketId = searchParams.get('market')
   
@@ -552,5 +550,13 @@ export default function LiquidityPage() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+export default function LiquidityPage() {
+  return (
+    <Suspense fallback={<div className="container mx-auto px-4 pt-24 pb-8">Loading...</div>}>
+      <LiquidityContent />
+    </Suspense>
   )
 }

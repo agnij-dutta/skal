@@ -94,8 +94,8 @@ export function Particles({
 
     state.gl.setRenderTarget(target);
     state.gl.clear();
-    // @ts-ignore
-    state.gl.render(scene, camera);
+        // @ts-expect-error - Three.js render method signature issue
+        state.gl.render(scene, camera);
     state.gl.setRenderTarget(null);
 
     // Use manual time if enabled, otherwise use elapsed time
@@ -149,7 +149,7 @@ export function Particles({
   return (
     <>
       {createPortal(
-        // @ts-ignore
+        // @ts-expect-error - Three.js mesh material type issue
         <mesh material={simulationMaterial}>
           <bufferGeometry>
             <bufferAttribute
@@ -159,10 +159,10 @@ export function Particles({
             <bufferAttribute attach="attributes-uv" args={[uvs, 2]} />
           </bufferGeometry>
         </mesh>,
-        // @ts-ignore
+        // @ts-expect-error - Three.js scene type issue
         scene
       )}
-      {/* @ts-ignore */}
+      {/* @ts-expect-error - Three.js points material type issue */}
       <points material={dofPointsMaterial} {...props}>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[particles, 3]} />
