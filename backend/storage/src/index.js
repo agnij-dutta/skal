@@ -3,8 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import multer from 'multer'
 import pinataSDK from '@pinata/sdk'
-import { xchacha20poly1305 } from '@noble/ciphers/chacha'
-import { randomBytes } from 'crypto'
+import { randomBytes, createCipheriv, createDecipheriv } from 'crypto'
 import { sha256 } from '@noble/hashes/sha256'
 
 dotenv.config()
@@ -21,10 +20,11 @@ const pinata = new pinataSDK({
 
 function encryptBuffer(plaintext) {
   const key = randomBytes(32)
-  const nonce = randomBytes(24)
-  const aead = xchacha20poly1305(key)
-  const ciphertext = Buffer.from(aead.seal(nonce, plaintext))
-  return { key, nonce, ciphertext }
+  const iv = randomBytes(16)
+  const cipher = createCipheriv('aes-256-cbc', key, iv)
+  let encrypted = cipher.update(plaintext)
+  encrypted = Buffer.concat([encrypted, cipher.final()])
+  return { key, nonce: iv, ciphertext: encrypted }
 }
 
 function hex(buf) {

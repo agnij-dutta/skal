@@ -18,8 +18,8 @@ const config = {
       chainId: 1337,
     },
     somniaTestnet: {
-      url: "https://rpc.testnet.somnia.network",
-      chainId: 0x1a1a1a, // 1703936 in decimal
+      url: "https://dream-rpc.somnia.network/",
+      chainId: 50312, // Testnet chain ID from the network table
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
     somniaMainnet: {
