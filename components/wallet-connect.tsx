@@ -24,8 +24,12 @@ export function WalletConnect({ className }: WalletConnectProps) {
         try {
           const accounts = await window.ethereum.request({ method: 'eth_accounts' })
           if (accounts.length > 0) {
-            setIsConnected(true)
-            setAddress(accounts[0])
+            // Only set as connected if we're on the correct network
+            const chainId = await window.ethereum.request({ method: 'eth_chainId' })
+            if (chainId === '0xc488') { // 50312 in hex
+              setIsConnected(true)
+              setAddress(accounts[0])
+            }
           }
         } catch (error) {
           console.error('Failed to check wallet connection:', error)
@@ -48,6 +52,12 @@ export function WalletConnect({ className }: WalletConnectProps) {
           router.push('/')
         }
       })
+      
+      // Listen for chain changes
+      window.ethereum.on('chainChanged', () => {
+        // Reload the page on chain change as recommended by MetaMask
+        window.location.reload()
+      })
     }
   }, [router])
 
@@ -60,7 +70,35 @@ export function WalletConnect({ className }: WalletConnectProps) {
     setIsConnecting(true)
     
     try {
-      // Request account access
+      // First, try to switch to the correct network
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0xc488' }], // 50312 in hex
+        })
+      } catch (switchError: any) {
+        // If the chain doesn't exist, add it
+        if (switchError.code === 4902) {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: '0xc488', // 50312 in hex
+              chainName: 'Somnia Testnet',
+              nativeCurrency: {
+                name: 'Somnia Test Token',
+                symbol: 'STT',
+                decimals: 18,
+              },
+              rpcUrls: ['https://dream-rpc.somnia.network/'],
+              blockExplorerUrls: ['https://shannon-explorer.somnia.network/'],
+            }],
+          })
+        } else {
+          throw switchError
+        }
+      }
+
+      // Now request account access (this will always prompt)
       const accounts = await window.ethereum.request({
         method: 'eth_requestAccounts',
       })
@@ -73,7 +111,7 @@ export function WalletConnect({ className }: WalletConnectProps) {
         try {
           await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0xC468' }], // 50312 in hex
+            params: [{ chainId: '0xc488' }], // 50312 in hex
           })
         } catch (switchError: any) {
           // If the chain doesn't exist, add it
@@ -82,7 +120,7 @@ export function WalletConnect({ className }: WalletConnectProps) {
               await window.ethereum.request({
                 method: 'wallet_addEthereumChain',
                 params: [{
-                  chainId: '0xC468', // 50312 in hex
+                  chainId: '0xc488', // 50312 in hex
                   chainName: 'Somnia Testnet',
                   nativeCurrency: {
                     name: 'Somnia Test Token',
@@ -142,7 +180,6 @@ export function WalletConnect({ className }: WalletConnectProps) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
         <Button
-          variant="outline"
           size="sm"
           onClick={copyAddress}
           className="bg-white/10 border-white/20 text-white hover:bg-white/20"
@@ -150,7 +187,6 @@ export function WalletConnect({ className }: WalletConnectProps) {
           {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         </Button>
         <Button
-          variant="outline"
           size="sm"
           onClick={disconnectWallet}
           className="bg-white/10 border-white/20 text-white hover:bg-white/20"
