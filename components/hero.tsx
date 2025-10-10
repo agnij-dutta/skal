@@ -23,19 +23,19 @@ export function Hero() {
           }
         </p>
 
-        <Link className="contents max-sm:hidden" href="/#contact">
+        <Link className="contents max-sm:hidden" href="/markets">
           <Button className="mt-14" onMouseEnter={() => setHovering(true)} onMouseLeave={() => setHovering(false)}>
-            {"[Join the Waitlist]"}
+            {"[Explore Markets]"}
           </Button>
         </Link>
-        <Link className="contents sm:hidden" href="/#contact">
+        <Link className="contents sm:hidden" href="/markets">
           <Button
             size="sm"
             className="mt-14"
             onMouseEnter={() => setHovering(true)}
             onMouseLeave={() => setHovering(false)}
           >
-            {"[Join the Waitlist]"}
+            {"[Explore Markets]"}
           </Button>
         </Link>
       </div>

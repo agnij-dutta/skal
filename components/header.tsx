@@ -1,12 +1,16 @@
 "use client"
 
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { Logo } from "./logo"
 import { MobileMenu } from "./mobile-menu"
+import { WalletConnect } from "./wallet-connect"
 import { useEffect, useState } from "react"
 
 export const Header = () => {
   const [scrolled, setScrolled] = useState(false)
+  const pathname = usePathname()
+  const isLandingPage = pathname === '/'
 
   useEffect(() => {
     const onScroll = () => {
@@ -32,29 +36,46 @@ export const Header = () => {
           className="flex max-lg:hidden absolute left-1/2 -translate-x-1/2 items-center justify-center gap-x-10"
           aria-label="Primary"
         >
-          {[
-            { label: "About", href: "#about" },
-            { label: "Features", href: "#features" },
-            { label: "How It Works", href: "#how-it-works" },
-            { label: "Roadmap", href: "#roadmap" },
-            { label: "Metrics", href: "#metrics" },
-            { label: "Contact", href: "#contact" },
-          ].map((item) => (
-            <Link
-              className="uppercase inline-block font-mono text-foreground/60 hover:text-foreground/100 duration-150 transition-colors ease-out"
-              href={item.href}
-              key={item.label}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {isLandingPage ? (
+            <>
+              {[
+                { label: "About", href: "#about" },
+                { label: "Features", href: "#features" },
+                { label: "How It Works", href: "#how-it-works" },
+                { label: "Roadmap", href: "#roadmap" },
+                { label: "Metrics", href: "#metrics" },
+                { label: "Contact", href: "#contact" },
+              ].map((item) => (
+                <Link
+                  className="uppercase inline-block font-mono text-foreground/60 hover:text-foreground/100 duration-150 transition-colors ease-out"
+                  href={item.href}
+                  key={item.label}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </>
+          ) : (
+            <>
+              {[
+                { label: "Markets", href: "/markets" },
+                { label: "Commit", href: "/commit" },
+                { label: "Signals", href: "/signals" },
+                { label: "Reputation", href: "/reputation" },
+                { label: "Liquidity", href: "/liquidity" },
+              ].map((item) => (
+                <Link
+                  className="uppercase inline-block font-mono text-foreground/60 hover:text-foreground/100 duration-150 transition-colors ease-out"
+                  href={item.href}
+                  key={item.label}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </>
+          )}
         </nav>
-        <Link
-          className="uppercase max-lg:hidden transition-colors ease-out duration-150 font-mono text-primary hover:text-primary/80"
-          href="/#sign-in"
-        >
-          Sign In
-        </Link>
+        <WalletConnect className="max-lg:hidden" />
         <MobileMenu />
       </header>
     </div>

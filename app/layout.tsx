@@ -6,6 +6,8 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { GLProvider } from "@/components/gl/context"
 import { GL } from "@/components/gl"
+import { Web3Provider } from "@/lib/web3-provider"
+import { Toaster } from "sonner"
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -13,8 +15,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Skal Ventures",
-  description: "Investment strategies that outperform the market",
+  title: "Shadow Protocol - AI Intelligence Marketplace",
+  description: "Privacy-preserving marketplace for trading AI outputs on Somnia blockchain",
   generator: "v0.app",
 }
 
@@ -26,12 +28,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistMono.variable} antialiased`} suppressHydrationWarning>
-        <GLProvider>
-          <GL />
-          <Header />
-          {children}
-          <Footer />
-        </GLProvider>
+        <Web3Provider>
+          <GLProvider>
+            <GL />
+            <Header />
+            {children}
+            <Footer />
+            <Toaster />
+          </GLProvider>
+        </Web3Provider>
       </body>
     </html>
   )
