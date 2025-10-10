@@ -1,0 +1,19 @@
+{
+  "name": "shadow-agents",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev:provider": "node --env-file=.env src/providerAgent.js",
+    "dev:buyer": "node --env-file=.env src/buyerAgent.js",
+    "dev:verifier": "node --env-file=.env src/verifierAgent.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ethers": "^6.15.0",
+    "node-fetch": "^3.3.2"
+  }
+}
+
+
