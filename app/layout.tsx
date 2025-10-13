@@ -7,6 +7,7 @@ import { Footer } from "@/components/footer"
 import { GLProvider } from "@/components/gl/context"
 import { GL } from "@/components/gl"
 import { Web3Provider } from "@/lib/web3-provider"
+import { UserSignalsProvider } from "@/lib/contexts/UserSignalsContext"
 import { Toaster } from "sonner"
 
 const geistMono = Geist_Mono({
@@ -29,13 +30,15 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${geistMono.variable} antialiased`} suppressHydrationWarning>
         <Web3Provider>
-          <GLProvider>
-            <GL />
-            <Header />
-            {children}
-            <Footer />
-            <Toaster />
-          </GLProvider>
+          <UserSignalsProvider>
+            <GLProvider>
+              <GL />
+              <Header />
+              {children}
+              <Footer />
+              <Toaster />
+            </GLProvider>
+          </UserSignalsProvider>
         </Web3Provider>
       </body>
     </html>

@@ -8,4 +8,10 @@ somnia/typechain-types
 somnia/node_modules
 backend/**/node_modules
 backend/**/.env.local
-backend/**/deployment.json
+backend/agents/node_modules
+backend/agents/.env.local
+backend/storage/node_modules
+backend/storage/.env.local
+backend/storage/dist
+backend/agents/dist
+/.env.local

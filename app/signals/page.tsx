@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,14 +20,21 @@ import {
   DollarSign,
   TrendingUp,
   Users,
-  Filter
+  Filter,
+  Loader2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
+import { useLockFunds, useGetReputation, useGetActiveAgentsByType } from '@/lib/contracts/hooks'
+import { useSignals, useUserSignals, useAvailableSignals, useVerifiedSignals } from '@/lib/contracts/hooks/useSignals'
+import { useUserSignalsContext } from '@/lib/contexts/UserSignalsContext'
+import { AgentType } from '@/lib/contracts/hooks/useAgentRegistry'
+import { useAccount } from 'wagmi'
+import { formatEther } from 'viem'
 
 interface Signal {
   id: string
-  taskId: string
+  taskId: number
   marketId: number
   marketName: string
   provider: string
@@ -39,77 +46,34 @@ interface Signal {
   status: 'available' | 'locked' | 'revealed' | 'verified' | 'settled'
   verificationScore?: number
   category: string
+  isLoading?: boolean
 }
 
-const mockSignals: Signal[] = [
-  {
-    id: '1',
-    taskId: '12345',
-    marketId: 1,
-    marketName: 'ETH Price Prediction',
-    provider: '0x1234...5678',
-    providerReputation: 950,
-    description: '1-hour ETH price prediction with 98.5% confidence',
-    price: '0.05 STT',
-    stake: '0.05 STT',
-    commitTime: '2 minutes ago',
-    status: 'available',
-    category: 'DeFi'
+// Market metadata
+const MARKET_METADATA = {
+  1: {
+    name: 'ETH Price Prediction',
+    category: 'DeFi',
   },
-  {
-    id: '2',
-    taskId: '12346',
-    marketId: 2,
-    marketName: 'DeFi Signals',
-    provider: '0xabcd...efgh',
-    providerReputation: 920,
-    description: 'Yield farming opportunity on Uniswap V3',
-    price: '0.08 STT',
-    stake: '0.08 STT',
-    commitTime: '5 minutes ago',
-    status: 'available',
-    category: 'DeFi'
+  2: {
+    name: 'DeFi Signals',
+    category: 'DeFi',
   },
-  {
-    id: '3',
-    taskId: '12347',
-    marketId: 3,
-    marketName: 'NLP Embeddings',
-    provider: '0x9876...5432',
-    providerReputation: 890,
-    description: 'High-quality text embeddings for semantic search',
-    price: '0.12 STT',
-    stake: '0.12 STT',
-    commitTime: '8 minutes ago',
-    status: 'available',
-    category: 'NLP'
+  3: {
+    name: 'NLP Embeddings',
+    category: 'NLP',
   },
-  {
-    id: '4',
-    taskId: '12348',
-    marketId: 1,
-    marketName: 'ETH Price Prediction',
-    provider: '0x1111...2222',
-    providerReputation: 980,
-    description: 'Advanced ML model prediction for ETH price',
-    price: '0.06 STT',
-    stake: '0.06 STT',
-    commitTime: '12 minutes ago',
-    status: 'verified',
-    verificationScore: 97.2,
-    category: 'DeFi'
-  }
-]
+} as const
 
 function SignalsContent() {
   const searchParams = useSearchParams()
   const marketFilter = searchParams.get('market')
+  const { address } = useAccount()
   
-  const [signals, setSignals] = useState<Signal[]>(mockSignals)
-  const [filteredSignals, setFilteredSignals] = useState<Signal[]>(mockSignals)
+  const [activeTab, setActiveTab] = useState<'available' | 'verified' | 'my-signals'>('available')
+
   const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null)
   const [buyAmount, setBuyAmount] = useState('')
-  const [isBuying, setIsBuying] = useState(false)
   const [filters, setFilters] = useState({
     category: 'all',
     status: 'available',
@@ -117,7 +81,40 @@ function SignalsContent() {
     maxPrice: '1000'
   })
 
+  // Contract hooks
+  const lockFunds = useLockFunds()
+  const { addPurchasedSignal } = useUserSignalsContext()
+
+  // Get signals data using new hooks
+  const { signals: allSignals, isLoading: signalsLoading } = useSignals()
+  const { signals: availableSignals } = useAvailableSignals()
+  const { signals: verifiedSignals } = useVerifiedSignals()
+  
+  // Get user's purchased signals from context
+  const { purchasedSignals: userSignals } = useUserSignalsContext()
+
+  // Show success toast when transaction is confirmed
   useEffect(() => {
+    if (lockFunds.isSuccess && lockFunds.hash) {
+      toast.success(`Successfully locked funds! Transaction: ${lockFunds.hash.slice(0, 10)}...`)
+    }
+  }, [lockFunds.isSuccess, lockFunds.hash])
+
+  // Get signals based on active tab
+  const signals = useMemo(() => {
+    switch (activeTab) {
+      case 'available':
+        return availableSignals
+      case 'verified':
+        return verifiedSignals
+      case 'my-signals':
+        return userSignals
+      default:
+        return allSignals
+    }
+  }, [activeTab, availableSignals, verifiedSignals, userSignals, allSignals])
+
+  const filteredSignals = useMemo(() => {
     let filtered = signals
 
     // Apply market filter
@@ -139,7 +136,7 @@ function SignalsContent() {
       filtered = filtered.filter(s => parseFloat(s.price) <= parseFloat(filters.maxPrice))
     }
 
-    setFilteredSignals(filtered)
+    return filtered
   }, [signals, filters, marketFilter])
 
   const handleBuySignal = async (signal: Signal) => {
@@ -148,25 +145,38 @@ function SignalsContent() {
       return
     }
 
-    setIsBuying(true)
-    setSelectedSignal(signal)
+    if (!address) {
+      toast.error('Please connect your wallet first')
+      return
+    }
 
     try {
-      // Simulate buying process
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      // Lock funds for the task
+      await lockFunds.lockFunds(signal.taskId, buyAmount)
       
-      // Update signal status
-      setSignals(prev => prev.map(s => 
-        s.id === signal.id ? { ...s, status: 'locked' as const } : s
-      ))
+      // Add to user's purchased signals
+      addPurchasedSignal({
+        id: signal.id,
+        taskId: signal.taskId,
+        marketId: signal.marketId,
+        marketName: signal.marketName,
+        provider: signal.provider,
+        providerReputation: signal.providerReputation,
+        description: signal.description,
+        price: signal.price,
+        stake: signal.stake,
+        commitTime: signal.commitTime,
+        status: 'locked',
+        category: signal.category,
+      })
       
-      toast.success(`Successfully bought signal for ${buyAmount} STT`)
+      // Don't show success toast here - wait for transaction confirmation
+      // The success will be shown when the transaction is confirmed
       setBuyAmount('')
       setSelectedSignal(null)
     } catch (error) {
-      toast.error('Failed to buy signal')
-    } finally {
-      setIsBuying(false)
+      console.error('Buy signal error:', error)
+      toast.error('Failed to buy signal: ' + (error as Error).message)
     }
   }
 
@@ -292,70 +302,88 @@ function SignalsContent() {
         <div className="lg:col-span-3">
           <Tabs defaultValue="available" className="space-y-6">
             <TabsList>
-              <TabsTrigger value="available">Available ({filteredSignals.filter(s => s.status === 'available').length})</TabsTrigger>
-              <TabsTrigger value="verified">Verified ({filteredSignals.filter(s => s.status === 'verified').length})</TabsTrigger>
-              <TabsTrigger value="my-signals">My Signals (0)</TabsTrigger>
+              <TabsTrigger value="available">Available ({availableSignals.length})</TabsTrigger>
+              <TabsTrigger value="verified">Verified ({verifiedSignals.length})</TabsTrigger>
+              <TabsTrigger value="my-signals">My Signals ({userSignals.length})</TabsTrigger>
             </TabsList>
 
             <TabsContent value="available" className="space-y-4">
-              {filteredSignals.filter(s => s.status === 'available').map((signal) => (
+              {availableSignals.map((signal) => (
                 <Card key={signal.id} className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl hover:shadow-2xl hover:bg-white/15 transition-all duration-300">
                   <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold text-lg text-white">{signal.marketName}</h3>
-                          {getStatusBadge(signal.status)}
+                    {signal.isLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin text-white/70" />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="font-semibold text-lg text-white">{signal.marketName}</h3>
+                              {getStatusBadge(signal.status)}
+                            </div>
+                            <p className="text-white/80 mb-2">{signal.description}</p>
+                            <div className="flex items-center gap-4 text-sm text-white/70">
+                              <span>Task #{signal.taskId}</span>
+                              <span>•</span>
+                              <span>{signal.commitTime}</span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-2xl font-bold text-white">{signal.price}</div>
+                            <div className="text-sm text-white/70">per signal</div>
+                          </div>
                         </div>
-                        <p className="text-white/80 mb-2">{signal.description}</p>
-                        <div className="flex items-center gap-4 text-sm text-white/70">
-                          <span>Task #{signal.taskId}</span>
-                          <span>•</span>
-                          <span>{signal.commitTime}</span>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                          <div>
+                            <p className="text-sm text-white/70">Provider</p>
+                            <p className="font-medium text-white">{signal.provider}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-white/70">Reputation</p>
+                            <p className={`font-medium ${getReputationColor(signal.providerReputation)}`}>
+                              {signal.providerReputation}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-white/70">Stake</p>
+                            <p className="font-medium text-white">{signal.stake}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-white/70">Category</p>
+                            <p className="font-medium text-white">{signal.category}</p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-2xl font-bold text-white">{signal.price}</div>
-                        <div className="text-sm text-white/70">per signal</div>
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                      <div>
-                        <p className="text-sm text-white/70">Provider</p>
-                        <p className="font-medium text-white">{signal.provider}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-white/70">Reputation</p>
-                        <p className={`font-medium ${getReputationColor(signal.providerReputation)}`}>
-                          {signal.providerReputation}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-white/70">Stake</p>
-                        <p className="font-medium text-white">{signal.stake}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-white/70">Category</p>
-                        <p className="font-medium text-white">{signal.category}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button 
-                        onClick={() => setSelectedSignal(signal)}
-                        className="flex-1 bg-white/20 hover:bg-white/30 text-white border-white/30"
-                      >
-                        <ShoppingCart className="h-4 w-4 mr-2" />
-                        Buy Signal
-                      </Button>
-                      <Button variant="outline" className="bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
-                        <Link href={`/markets/${signal.marketId}`}>
-                          <Eye className="h-4 w-4 mr-2" />
-                          View Market
-                        </Link>
-                      </Button>
-                    </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            onClick={() => setSelectedSignal(signal)}
+                            disabled={lockFunds.isPending || lockFunds.isConfirming}
+                            className="flex-1 bg-white/20 hover:bg-white/30 text-white border-white/30"
+                          >
+                            {lockFunds.isPending || lockFunds.isConfirming ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                {lockFunds.isPending ? 'Confirming...' : 'Buying...'}
+                              </>
+                            ) : (
+                              <>
+                                <ShoppingCart className="h-4 w-4 mr-2" />
+                                Buy Signal
+                              </>
+                            )}
+                          </Button>
+                          <Button variant="outline" className="bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
+                            <Link href={`/markets/${signal.marketId}`}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Market
+                            </Link>
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -369,7 +397,7 @@ function SignalsContent() {
             </TabsContent>
 
             <TabsContent value="verified" className="space-y-4">
-              {filteredSignals.filter(s => s.status === 'verified').map((signal) => (
+              {verifiedSignals.map((signal) => (
                 <Card key={signal.id} className="hover:shadow-lg transition-shadow">
                   <CardContent className="p-6">
                     <div className="flex items-start justify-between mb-4">
@@ -428,13 +456,43 @@ function SignalsContent() {
             </TabsContent>
 
             <TabsContent value="my-signals" className="space-y-4">
-              <div className="text-center py-12">
-                <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">You haven&apos;t purchased any signals yet</p>
-                <Button className="mt-4" asChild>
-                  <Link href="/signals">Browse Signals</Link>
-                </Button>
-              </div>
+              {userSignals.length === 0 ? (
+                <div className="text-center py-12">
+                  <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">You haven&apos;t purchased any signals yet</p>
+                  <Button className="mt-4" asChild>
+                    <Link href="/signals">Browse Signals</Link>
+                  </Button>
+                </div>
+              ) : (
+                userSignals.map((signal) => (
+                  <Card key={signal.id} className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl hover:shadow-2xl hover:bg-white/15 transition-all duration-300">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="font-semibold text-white">{signal.marketName}</h3>
+                            <Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-400/30">
+                              Purchased
+                            </Badge>
+                          </div>
+                          <p className="text-white/70 text-sm mb-2">{signal.description}</p>
+                          <div className="flex items-center gap-4 text-sm text-white/60">
+                            <span>Task #{signal.taskId}</span>
+                            <span>{signal.commitTime}</span>
+                            <span>Provider: {signal.provider}</span>
+                            <span>Reputation: {signal.providerReputation}</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-semibold text-white">{signal.price}</div>
+                          <div className="text-sm text-white/60">per signal</div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
             </TabsContent>
           </Tabs>
         </div>
@@ -442,17 +500,17 @@ function SignalsContent() {
 
       {/* Buy Modal */}
       {selectedSignal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle>Buy Signal</CardTitle>
-              <CardDescription>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-md bg-white/10 backdrop-blur-md border border-white/20 shadow-2xl">
+            <CardHeader className="border-b border-white/10">
+              <CardTitle className="text-white">Buy Signal</CardTitle>
+              <CardDescription className="text-white/70">
                 Purchase {selectedSignal.marketName} from {selectedSignal.provider}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-6">
               <div className="space-y-2">
-                <Label htmlFor="amount">Amount (STT)</Label>
+                <Label htmlFor="amount" className="text-white/90">Amount (STT)</Label>
                 <Input
                   id="amount"
                   type="number"
@@ -460,41 +518,58 @@ function SignalsContent() {
                   value={buyAmount}
                   onChange={(e) => setBuyAmount(e.target.value)}
                   placeholder={selectedSignal.price}
+                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:border-white/40 focus:ring-white/20"
                 />
               </div>
 
-              <div className="p-4 bg-muted rounded-lg space-y-2">
-                <div className="flex justify-between">
+              <div className="p-4 bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg space-y-2">
+                <div className="flex justify-between text-white/80">
                   <span>Signal Price:</span>
                   <span>{selectedSignal.price}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between text-white/80">
                   <span>Gas Fee:</span>
                   <span>~0.001 STT</span>
                 </div>
-                <div className="flex justify-between font-bold">
+                <div className="flex justify-between font-bold text-white">
                   <span>Total:</span>
                   <span>{(parseFloat(buyAmount || selectedSignal.price) + 0.001).toFixed(3)} STT</span>
                 </div>
               </div>
 
+              {lockFunds.error && (
+                <Alert className="bg-red-500/20 border-red-400/30">
+                  <AlertDescription className="text-red-300">
+                    Error: {lockFunds.error.message}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {lockFunds.hash && (
+                <Alert className="bg-blue-500/20 border-blue-400/30">
+                  <AlertDescription className="text-blue-300">
+                    Transaction Hash: {lockFunds.hash}
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="flex gap-2">
                 <Button 
                   variant="outline" 
-                  className="flex-1"
+                  className="flex-1 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/30"
                   onClick={() => setSelectedSignal(null)}
                 >
                   Cancel
                 </Button>
                 <Button 
-                  className="flex-1"
+                  className="flex-1 bg-gradient-to-r from-yellow-400/90 to-yellow-500/90 hover:from-yellow-400 hover:to-yellow-500 text-black font-semibold shadow-lg"
                   onClick={() => handleBuySignal(selectedSignal)}
-                  disabled={isBuying}
+                  disabled={lockFunds.isPending || lockFunds.isConfirming}
                 >
-                  {isBuying ? (
+                  {lockFunds.isPending || lockFunds.isConfirming ? (
                     <>
-                      <Clock className="h-4 w-4 mr-2 animate-spin" />
-                      Buying...
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {lockFunds.isPending ? 'Confirming...' : 'Buying...'}
                     </>
                   ) : (
                     <>

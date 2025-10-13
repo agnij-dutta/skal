@@ -1,12 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { TrendingUp, Users, Activity, DollarSign, Eye } from 'lucide-react'
+import { TrendingUp, Users, Activity, DollarSign, Eye, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import { useGetMarket, useGetMarketTasks, useGetActiveAgentsByType, useGetTotalTasks } from '@/lib/contracts/hooks'
+import { AgentType } from '@/lib/contracts/hooks/useAgentRegistry'
+import { formatEther } from 'viem'
 
 interface Market {
   id: number
@@ -20,64 +23,154 @@ interface Market {
   providers: number
   commits: number
   status: 'active' | 'paused' | 'closed'
+  isLoading?: boolean
 }
 
-const mockMarkets: Market[] = [
-  {
-    id: 1,
+// Market metadata - this would ideally come from a config or database
+const MARKET_METADATA = {
+  1: {
     name: 'ETH Price Prediction',
     description: '1-hour Ethereum price predictions with 0.5% accuracy threshold',
     category: 'DeFi',
-    liquidity: '12.5 STT',
-    volume24h: '8.2 STT',
-    price: '0.05 STT',
-    change24h: 12.5,
-    providers: 15,
-    commits: 142,
-    status: 'active'
   },
-  {
-    id: 2,
+  2: {
     name: 'DeFi Signals',
     description: 'Trading signals for DeFi protocols and yield farming opportunities',
     category: 'DeFi',
-    liquidity: '8.3 STT',
-    volume24h: '5.1 STT',
-    price: '0.08 STT',
-    change24h: -3.2,
-    providers: 8,
-    commits: 67,
-    status: 'active'
   },
-  {
-    id: 3,
+  3: {
     name: 'NLP Embeddings',
     description: 'High-quality text embeddings for semantic search and similarity',
     category: 'NLP',
-    liquidity: '15.7 STT',
-    volume24h: '12.3 STT',
-    price: '0.12 STT',
-    change24h: 8.7,
-    providers: 22,
-    commits: 89,
-    status: 'active'
-  }
-]
+  },
+} as const
 
 export default function MarketsPage() {
-  const [markets, setMarkets] = useState<Market[]>(mockMarkets)
-  const [filteredMarkets, setFilteredMarkets] = useState<Market[]>(mockMarkets)
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
+
+  // Fetch data for all markets
+  const market1 = useGetMarket(1)
+  const market2 = useGetMarket(2)
+  const market3 = useGetMarket(3)
+
+  // Get task counts for each market
+  const tasks1 = useGetMarketTasks(1)
+  const tasks2 = useGetMarketTasks(2)
+  const tasks3 = useGetMarketTasks(3)
+
+  // Get provider agents
+  const providers = useGetActiveAgentsByType(AgentType.Provider)
+  const totalTasks = useGetTotalTasks()
+
+  // Debug: Log contract data
+  useEffect(() => {
+    console.log('Market 1 data:', market1)
+    console.log('Market 2 data:', market2)
+    console.log('Market 3 data:', market3)
+    console.log('Tasks 1 data:', tasks1)
+    console.log('Tasks 2 data:', tasks2)
+    console.log('Tasks 3 data:', tasks3)
+    console.log('Providers data:', providers)
+    console.log('Total tasks data:', totalTasks)
+  }, [market1, market2, market3, tasks1, tasks2, tasks3, providers, totalTasks])
+
+  // Transform contract data into market objects
+  const markets = useMemo(() => {
+    const marketData = [
+      { contract: market1, tasks: tasks1, id: 1 },
+      { contract: market2, tasks: tasks2, id: 2 },
+      { contract: market3, tasks: tasks3, id: 3 },
+    ]
+
+    return marketData.map(({ contract, tasks, id }) => {
+      const metadata = MARKET_METADATA[id as keyof typeof MARKET_METADATA]
+      const isLoading = contract.isLoading || tasks.isLoading
+
+      if (isLoading) {
+        return {
+          id,
+          name: metadata.name,
+          description: metadata.description,
+          category: metadata.category,
+          liquidity: '0 STT',
+          volume24h: '0 STT',
+          price: '0 STT',
+          change24h: 0,
+          providers: 0,
+          commits: 0,
+          status: 'active' as const,
+          isLoading: true,
+        }
+      }
+
+      if (!contract.market) {
+        console.log(`Market ${id} not found in contract`)
+        return {
+          id,
+          name: metadata.name,
+          description: metadata.description,
+          category: metadata.category,
+          liquidity: '0 STT',
+          volume24h: '0 STT',
+          price: '0 STT',
+          change24h: 0,
+          providers: 0,
+          commits: 0,
+          status: 'closed' as const,
+          isLoading: false,
+        }
+      }
+
+      const reserveA = contract.market.reserveA
+      const reserveB = contract.market.reserveB
+      const totalSupply = contract.market.totalSupply
+
+      // Calculate liquidity (reserveA + reserveB in STT)
+      const liquidity = formatEther(reserveA + reserveB)
+      
+      // Calculate price (reserveA / reserveB)
+      const price = reserveB > 0n ? formatEther((reserveA * 1000n) / reserveB) : '0'
+      
+      // Get task count for this market
+      const commits = tasks.taskIds ? Number(tasks.taskIds.length) : 0
+      
+      // Get provider count (simplified - would need more complex logic in real app)
+      const providerCount = providers.agents ? providers.agents.length : 0
+
+      return {
+        id,
+        name: metadata.name,
+        description: metadata.description,
+        category: metadata.category,
+        liquidity: `${liquidity} STT`,
+        volume24h: '0 STT', // Would need historical data
+        price: `${price} STT`,
+        change24h: 0, // Would need historical data
+        providers: providerCount,
+        commits,
+        status: contract.market.active ? 'active' : 'paused',
+        isLoading: false,
+      }
+    })
+  }, [market1, market2, market3, tasks1, tasks2, tasks3, providers])
+
+  const filteredMarkets = useMemo(() => {
+    if (selectedCategory === 'all') {
+      return markets
+    }
+    return markets.filter(m => m.category === selectedCategory)
+  }, [selectedCategory, markets])
 
   const categories = ['all', ...Array.from(new Set(markets.map(m => m.category)))]
 
-  useEffect(() => {
-    if (selectedCategory === 'all') {
-      setFilteredMarkets(markets)
-    } else {
-      setFilteredMarkets(markets.filter(m => m.category === selectedCategory))
-    }
-  }, [selectedCategory, markets])
+  // Calculate totals
+  const totalLiquidity = markets.reduce((sum, market) => {
+    const liquidity = parseFloat(market.liquidity.replace(' STT', ''))
+    return sum + liquidity
+  }, 0)
+
+  const totalProviders = providers.agents ? providers.agents.length : 0
+  const totalCommits = totalTasks.totalTasks ? Number(totalTasks.totalTasks) : 0
 
   return (
     <div className="container mx-auto px-4 pt-24 pb-8">
@@ -107,7 +200,9 @@ export default function MarketsPage() {
             <DollarSign className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">36.5 STT</div>
+            <div className="text-2xl font-bold text-white">
+              {totalLiquidity.toFixed(2)} STT
+            </div>
             <p className="text-xs text-white/70">Across all markets</p>
           </CardContent>
         </Card>
@@ -118,7 +213,13 @@ export default function MarketsPage() {
             <Users className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">45</div>
+            <div className="text-2xl font-bold text-white">
+              {providers.isLoading ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                totalProviders
+              )}
+            </div>
             <p className="text-xs text-white/70">Registered agents</p>
           </CardContent>
         </Card>
@@ -129,8 +230,14 @@ export default function MarketsPage() {
             <TrendingUp className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">298</div>
-            <p className="text-xs text-white/70">This week</p>
+            <div className="text-2xl font-bold text-white">
+              {totalTasks.isLoading ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                totalCommits
+              )}
+            </div>
+            <p className="text-xs text-white/70">All time</p>
           </CardContent>
         </Card>
       </div>
@@ -164,54 +271,62 @@ export default function MarketsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {/* Market Stats */}
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-white/70">Liquidity</p>
-                    <p className="font-semibold text-white">{market.liquidity}</p>
+                {market.isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-white/70" />
                   </div>
-                  <div>
-                    <p className="text-white/70">24h Volume</p>
-                    <p className="font-semibold text-white">{market.volume24h}</p>
-                  </div>
-                  <div>
-                    <p className="text-white/70">Price</p>
-                    <p className="font-semibold text-white">{market.price}</p>
-                  </div>
-                  <div>
-                    <p className="text-white/70">24h Change</p>
-                    <p className={`font-semibold ${market.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      {market.change24h >= 0 ? '+' : ''}{market.change24h}%
-                    </p>
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    {/* Market Stats */}
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-white/70">Liquidity</p>
+                        <p className="font-semibold text-white">{market.liquidity}</p>
+                      </div>
+                      <div>
+                        <p className="text-white/70">24h Volume</p>
+                        <p className="font-semibold text-white">{market.volume24h}</p>
+                      </div>
+                      <div>
+                        <p className="text-white/70">Price</p>
+                        <p className="font-semibold text-white">{market.price}</p>
+                      </div>
+                      <div>
+                        <p className="text-white/70">24h Change</p>
+                        <p className={`font-semibold ${market.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {market.change24h >= 0 ? '+' : ''}{market.change24h}%
+                        </p>
+                      </div>
+                    </div>
 
-                {/* Provider Stats */}
-                <div className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-white/70" />
-                    <span className="text-white/80">{market.providers} providers</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-white/70" />
-                    <span className="text-white/80">{market.commits} commits</span>
-                  </div>
-                </div>
+                    {/* Provider Stats */}
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-white/70" />
+                        <span className="text-white/80">{market.providers} providers</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Activity className="h-4 w-4 text-white/70" />
+                        <span className="text-white/80">{market.commits} commits</span>
+                      </div>
+                    </div>
 
-                {/* Actions */}
-                <div className="flex gap-2">
-                  <Button asChild className="flex-1 bg-white/20 hover:bg-white/30 text-white border-white/30">
-                    <Link href={`/markets/${market.id}`}>
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Details
-                    </Link>
-                  </Button>
-                  <Button variant="outline" asChild className="bg-transparent hover:bg-white/10 text-white border-white/30">
-                    <Link href={`/signals?market=${market.id}`}>
-                      Buy Signal
-                    </Link>
-                  </Button>
-                </div>
+                    {/* Actions */}
+                    <div className="flex gap-2">
+                      <Button asChild className="flex-1 bg-white/20 hover:bg-white/30 text-white border-white/30">
+                        <Link href={`/markets/${market.id}`}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Details
+                        </Link>
+                      </Button>
+                      <Button variant="outline" asChild className="bg-transparent hover:bg-white/10 text-white border-white/30">
+                        <Link href={`/signals?market=${market.id}`}>
+                          Buy Signal
+                        </Link>
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>

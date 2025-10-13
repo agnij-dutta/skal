@@ -3,14 +3,14 @@
     "name": "somniaTestnet",
     "chainId": "50312"
   },
-  "timestamp": "2025-10-10T15:53:26.898Z",
+  "timestamp": "2025-10-13T17:16:08.229Z",
   "deployer": "0xe87758C6CCcf3806C9f1f0C8F99f6Dcae36E5449",
   "contracts": {
-    "CommitRegistry": "0xB94ecC5a4cA8D7D2749cE8353F03B38372235C26",
-    "EscrowManager": "0x8F9Cce60CDa5c3b262c30321f40a180A6A9DA762",
-    "AMMEngine": "0x0E37cc3Dc8Fa1675f2748b77dddfF452b63DD4CC",
-    "ReputationManager": "0x0Ff7d4E7aF64059426F76d2236155ef1655C99D8",
-    "AgentRegistry": "0x2CC077f1Da27e7e08A1832804B03b30A2990a61C"
+    "CommitRegistry": "0x8D7cd1c2bEcA4eb4cE7aa0fA37eCB61ea125171f",
+    "EscrowManager": "0x5952b85E23388130A0D2C34B1151A4d60414d998",
+    "AMMEngine": "0x463f717e81182B3949b7d0382d30471984921f2f",
+    "ReputationManager": "0xd1077A0D78b8F6969f16c7409CdaB566B6d62486",
+    "AgentRegistry": "0x4cc020E6eC340401cdb4f89fC09E5ad3920E5E46"
   },
   "markets": {
     "1": "ETH Price Prediction",

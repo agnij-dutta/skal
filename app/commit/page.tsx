@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,10 +16,14 @@ import {
   Eye, 
   CheckCircle, 
   Clock, 
-  Shield
+  Shield,
+  Loader2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
+import { useCommitTask, useRevealTask, useGetTask, useWatchCommitRegistryEvents } from '@/lib/contracts/hooks'
+import { storageClient } from '@/lib/storage-client'
+import { useAccount } from 'wagmi'
 
 interface CommitStep {
   id: string
@@ -70,6 +74,7 @@ const steps: CommitStep[] = [
 function CommitContent() {
   const searchParams = useSearchParams()
   const marketId = searchParams.get('market')
+  const { address } = useAccount()
   
   const [currentStep, setCurrentStep] = useState(0)
   const [formData, setFormData] = useState({
@@ -80,8 +85,43 @@ function CommitContent() {
     encryptionKey: ''
   })
   const [commitHash, setCommitHash] = useState('')
-  const [taskId, setTaskId] = useState('')
+  const [taskId, setTaskId] = useState<number | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [uploadResult, setUploadResult] = useState<any>(null)
+
+  // Contract hooks
+  const commitTask = useCommitTask()
+  const revealTask = useRevealTask()
+  const taskData = useGetTask(taskId || undefined)
+
+  // Watch for events
+  useWatchCommitRegistryEvents(
+    (event) => {
+      if (event.provider.toLowerCase() === address?.toLowerCase()) {
+        setTaskId(Number(event.taskId))
+        setCurrentStep(2) // Move to waiting for buyer
+        toast.success('Commit submitted successfully!')
+      }
+    },
+    (event) => {
+      if (taskId && Number(event.taskId) === taskId) {
+        setCurrentStep(3) // Move to reveal step
+        toast.success('Buyer found! You can now reveal your data.')
+      }
+    },
+    (event) => {
+      if (taskId && Number(event.taskId) === taskId) {
+        setCurrentStep(4) // Move to verification
+        toast.success('Data revealed successfully!')
+      }
+    },
+    (event) => {
+      if (taskId && Number(event.taskId) === taskId) {
+        setCurrentStep(5) // Move to settlement
+        toast.success('Verification complete! Payment processed.')
+      }
+    }
+  )
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -93,20 +133,36 @@ function CommitContent() {
       return
     }
 
+    if (!address) {
+      toast.error('Please connect your wallet first')
+      return
+    }
+
     setIsProcessing(true)
     
     try {
-      // Simulate encryption and upload
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      const mockCommitHash = `0x${Math.random().toString(16).substr(2, 64)}`
-      setCommitHash(mockCommitHash)
+      // Upload and encrypt data to IPFS
+      const result = await storageClient.encryptAndUpload(
+        formData.outputData,
+        {
+          policyId: 'policy_v1',
+          provider: address as `0x${string}`,
+        }
+      )
+
+      if (!result.success) {
+        throw new Error('Failed to upload data')
+      }
+
+      setUploadResult(result)
+      setCommitHash(result.commitHash)
       
       // Move to next step
       setCurrentStep(1)
       toast.success('Output prepared and encrypted successfully')
     } catch (error) {
-      toast.error('Failed to prepare output')
+      console.error('Upload error:', error)
+      toast.error('Failed to prepare output: ' + (error as Error).message)
     } finally {
       setIsProcessing(false)
     }
@@ -118,37 +174,53 @@ function CommitContent() {
       return
     }
 
+    if (!address) {
+      toast.error('Please connect your wallet first')
+      return
+    }
+
     setIsProcessing(true)
     
     try {
-      // Simulate blockchain transaction
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      // Submit commit to blockchain
+      await commitTask.commitTask(
+        commitHash as `0x${string}`,
+        parseInt(formData.marketId),
+        formData.stakeAmount
+      )
       
-      const mockTaskId = Math.floor(Math.random() * 1000000).toString()
-      setTaskId(mockTaskId)
-      
-      // Move to next step
-      setCurrentStep(2)
-      toast.success('Commit submitted to blockchain')
+      // The event listener will handle moving to the next step
+      toast.success('Commit transaction submitted!')
     } catch (error) {
-      toast.error('Failed to submit commit')
+      console.error('Commit error:', error)
+      toast.error('Failed to submit commit: ' + (error as Error).message)
     } finally {
       setIsProcessing(false)
     }
   }
 
   const handleReveal = async () => {
+    if (!taskId || !uploadResult) {
+      toast.error('No task or upload data available')
+      return
+    }
+
+    if (!address) {
+      toast.error('Please connect your wallet first')
+      return
+    }
+
     setIsProcessing(true)
     
     try {
-      // Simulate reveal process
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // Reveal the task with IPFS CID
+      await revealTask.revealTask(taskId, uploadResult.cid)
       
-      // Move to next step
-      setCurrentStep(4)
-      toast.success('Data revealed successfully')
+      // The event listener will handle moving to the next step
+      toast.success('Reveal transaction submitted!')
     } catch (error) {
-      toast.error('Failed to reveal data')
+      console.error('Reveal error:', error)
+      toast.error('Failed to reveal data: ' + (error as Error).message)
     } finally {
       setIsProcessing(false)
     }
@@ -292,13 +364,13 @@ function CommitContent() {
 
               <Button 
                 onClick={handleCommit} 
-                disabled={isProcessing}
+                disabled={isProcessing || commitTask.isPending || commitTask.isConfirming}
                 className="w-full bg-white/20 hover:bg-white/30 text-white border-white/30"
               >
-                {isProcessing ? (
+                {isProcessing || commitTask.isPending || commitTask.isConfirming ? (
                   <>
-                    <Clock className="h-4 w-4 mr-2 animate-spin" />
-                    Submitting Commit...
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {commitTask.isPending ? 'Confirming Transaction...' : 'Submitting Commit...'}
                   </>
                 ) : (
                   <>
@@ -307,6 +379,22 @@ function CommitContent() {
                   </>
                 )}
               </Button>
+
+              {commitTask.error && (
+                <Alert className="bg-red-500/20 border-red-400/30">
+                  <AlertDescription className="text-red-300">
+                    Error: {commitTask.error.message}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {commitTask.hash && (
+                <Alert className="bg-blue-500/20 border-blue-400/30">
+                  <AlertDescription className="text-blue-300">
+                    Transaction Hash: {commitTask.hash}
+                  </AlertDescription>
+                </Alert>
+              )}
             </CardContent>
           </Card>
         )
@@ -333,6 +421,10 @@ function CommitContent() {
 
               <div className="space-y-2 text-white">
                 <div className="flex justify-between">
+                  <span>Task ID:</span>
+                  <span className="font-mono">{taskId}</span>
+                </div>
+                <div className="flex justify-between">
                   <span>Commit Hash:</span>
                   <code className="text-sm text-white/80">{commitHash.slice(0, 20)}...</code>
                 </div>
@@ -342,8 +434,16 @@ function CommitContent() {
                 </div>
                 <div className="flex justify-between">
                   <span>Status:</span>
-                  <Badge variant="outline" className="bg-white/20 text-white border-white/30">Waiting for Buyer</Badge>
+                  <Badge variant="outline" className="bg-white/20 text-white border-white/30">
+                    {taskData.task ? 'Committed' : 'Waiting for Buyer'}
+                  </Badge>
                 </div>
+                {taskData.task && (
+                  <div className="flex justify-between">
+                    <span>Provider:</span>
+                    <code className="text-sm text-white/80">{taskData.task.provider.slice(0, 10)}...</code>
+                  </div>
+                )}
               </div>
 
               <Alert className="bg-white/5 border-white/20">
@@ -378,13 +478,13 @@ function CommitContent() {
 
               <Button 
                 onClick={handleReveal} 
-                disabled={isProcessing}
+                disabled={isProcessing || revealTask.isPending || revealTask.isConfirming}
                 className="w-full bg-white/20 hover:bg-white/30 text-white border-white/30"
               >
-                {isProcessing ? (
+                {isProcessing || revealTask.isPending || revealTask.isConfirming ? (
                   <>
-                    <Clock className="h-4 w-4 mr-2 animate-spin" />
-                    Revealing Data...
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {revealTask.isPending ? 'Confirming Transaction...' : 'Revealing Data...'}
                   </>
                 ) : (
                   <>
@@ -393,6 +493,22 @@ function CommitContent() {
                   </>
                 )}
               </Button>
+
+              {revealTask.error && (
+                <Alert className="bg-red-500/20 border-red-400/30">
+                  <AlertDescription className="text-red-300">
+                    Error: {revealTask.error.message}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {revealTask.hash && (
+                <Alert className="bg-blue-500/20 border-blue-400/30">
+                  <AlertDescription className="text-blue-300">
+                    Transaction Hash: {revealTask.hash}
+                  </AlertDescription>
+                </Alert>
+              )}
             </CardContent>
           </Card>
         )

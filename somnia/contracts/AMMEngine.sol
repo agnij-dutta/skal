@@ -127,7 +127,7 @@ contract AMMEngine is ReentrancyGuard, Ownable {
         address tokenB
     ) external onlyOwner {
         require(!markets[marketId].active, "Market already exists");
-        require(tokenA != tokenB, "Tokens must be different");
+        // Allow markets where both tokens are native STT (address(0))
 
         markets[marketId] = Market({
             marketId: marketId,
@@ -164,8 +164,14 @@ contract AMMEngine is ReentrancyGuard, Ownable {
         Market storage market = markets[marketId];
         
         if (market.tokenA == address(0)) {
-            // ETH market
-            require(msg.value == amountA, "ETH amount mismatch");
+            // ETH market for tokenA
+            if (market.tokenB == address(0)) {
+                // Both sides are native STT: require total msg.value to cover both amounts
+                require(msg.value == amountA + amountB, "ETH amount mismatch");
+            } else {
+                // Only tokenA is native
+                require(msg.value == amountA, "ETH amount mismatch");
+            }
         } else {
             // ERC20 market
             IERC20(market.tokenA).safeTransferFrom(msg.sender, address(this), amountA);
@@ -235,8 +241,10 @@ contract AMMEngine is ReentrancyGuard, Ownable {
         } else {
             IERC20(market.tokenA).safeTransfer(msg.sender, amountA);
         }
-        
-        if (market.tokenB != address(0)) {
+
+        if (market.tokenB == address(0)) {
+            payable(msg.sender).transfer(amountB);
+        } else {
             IERC20(market.tokenB).safeTransfer(msg.sender, amountB);
         }
 

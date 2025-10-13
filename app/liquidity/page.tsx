@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,10 +20,16 @@ import {
   PieChart,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react'
 import { ResponsiveContainer, AreaChart, Area } from 'recharts'
 import { toast } from 'sonner'
+import { useGetMarket, useAddLiquidity, useRemoveLiquidity, useGetLPTokenBalance, useGetMarketLiquidity, useGetUserLPTokens } from '@/lib/contracts/hooks'
+import { useAccount, useWatchContractEvent } from 'wagmi'
+import { formatEther } from 'viem'
+import { AMM_ENGINE_ABI } from '@/lib/contracts/abis/ammEngine'
+import { CONTRACT_ADDRESSES } from '@/lib/somnia-config'
 
 interface LiquidityPosition {
   id: string
@@ -57,107 +63,212 @@ interface MarketLiquidity {
   }[]
 }
 
-const mockPositions: LiquidityPosition[] = [
-  {
-    id: '1',
-    marketId: 1,
-    marketName: 'ETH Price Prediction',
-    tokenA: 'STT',
-    tokenB: 'ETH',
-    amountA: '10.0',
-    amountB: '0.5',
-    lpTokens: '2.236',
-    share: 15.2,
-    feesEarned: '0.45',
-    apy: 12.5,
-    status: 'active',
-    createdAt: '2024-01-15'
-  },
-  {
-    id: '2',
-    marketId: 2,
-    marketName: 'DeFi Signals',
-    tokenA: 'STT',
-    tokenB: 'USDC',
-    amountA: '5.0',
-    amountB: '5.0',
-    lpTokens: '5.0',
-    share: 8.7,
-    feesEarned: '0.23',
-    apy: 8.3,
-    status: 'active',
-    createdAt: '2024-02-01'
-  }
-]
-
-const mockMarkets: MarketLiquidity[] = [
-  {
-    id: 1,
+// Market metadata - this would ideally come from a config or database
+const MARKET_METADATA = {
+  1: {
     name: 'ETH Price Prediction',
-    totalLiquidity: '65.8 STT',
-    volume24h: '12.3 STT',
-    fees24h: '0.37 STT',
-    apy: 12.5,
-    price: '0.05 STT',
-    change24h: 5.2,
-    liquidityHistory: Array.from({ length: 30 }, (_, i) => ({
-      date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      liquidity: 65.8 + Math.random() * 10 - 5,
-      fees: 0.37 + Math.random() * 0.1 - 0.05
-    }))
+    description: '1-hour Ethereum price predictions with 0.5% accuracy threshold',
+    category: 'DeFi',
   },
-  {
-    id: 2,
+  2: {
     name: 'DeFi Signals',
-    totalLiquidity: '42.1 STT',
-    volume24h: '8.7 STT',
-    fees24h: '0.26 STT',
-    apy: 8.3,
-    price: '0.08 STT',
-    change24h: -2.1,
-    liquidityHistory: Array.from({ length: 30 }, (_, i) => ({
-      date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      liquidity: 42.1 + Math.random() * 8 - 4,
-      fees: 0.26 + Math.random() * 0.08 - 0.04
-    }))
+    description: 'Trading signals for DeFi protocols and yield farming opportunities',
+    category: 'DeFi',
   },
-  {
-    id: 3,
+  3: {
     name: 'NLP Embeddings',
-    totalLiquidity: '28.9 STT',
-    volume24h: '15.2 STT',
-    fees24h: '0.46 STT',
-    apy: 15.8,
-    price: '0.12 STT',
-    change24h: 8.7,
-    liquidityHistory: Array.from({ length: 30 }, (_, i) => ({
-      date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      liquidity: 28.9 + Math.random() * 6 - 3,
-      fees: 0.46 + Math.random() * 0.12 - 0.06
-    }))
-  }
-]
+    description: 'High-quality text embeddings for semantic search and similarity',
+    category: 'NLP',
+  },
+} as const
 
 function LiquidityContent() {
   const searchParams = useSearchParams()
   const marketId = searchParams.get('market')
+  const { address } = useAccount()
   
-  const [positions, setPositions] = useState<LiquidityPosition[]>(mockPositions)
-  const [markets, setMarkets] = useState<MarketLiquidity[]>(mockMarkets)
-  const [selectedMarket, setSelectedMarket] = useState<MarketLiquidity | null>(null)
+  // State for active tab
+  const [activeTab, setActiveTab] = useState('overview')
+  
   const [addLiquidity, setAddLiquidity] = useState({
     amountA: '',
     amountB: '',
     marketId: marketId || '1'
   })
-  const [isAdding, setIsAdding] = useState(false)
-  const [isRemoving, setIsRemoving] = useState(false)
 
-  useEffect(() => {
+  // Fetch data for all markets
+  const market1 = useGetMarket(1)
+  const market2 = useGetMarket(2)
+  const market3 = useGetMarket(3)
+
+  // Contract hooks
+  const addLiquidityHook = useAddLiquidity()
+  const removeLiquidityHook = useRemoveLiquidity()
+
+  // Fetch user's LP token balances for each market
+  const userLPTokens1 = useGetUserLPTokens(address, 1)
+  const userLPTokens2 = useGetUserLPTokens(address, 2)
+  const userLPTokens3 = useGetUserLPTokens(address, 3)
+
+  // Watch for liquidity events to update data in real-time
+  useWatchContractEvent({
+    address: CONTRACT_ADDRESSES.AMM_ENGINE as `0x${string}`,
+    abi: AMM_ENGINE_ABI,
+    eventName: 'LiquidityAdded',
+    onLogs: (logs) => {
+      console.log('LiquidityAdded event:', logs)
+      // Refetch all market data and LP token balances when liquidity is added
+      market1.refetch()
+      market2.refetch()
+      market3.refetch()
+      userLPTokens1.refetch()
+      userLPTokens2.refetch()
+      userLPTokens3.refetch()
+    },
+  })
+
+  useWatchContractEvent({
+    address: CONTRACT_ADDRESSES.AMM_ENGINE as `0x${string}`,
+    abi: AMM_ENGINE_ABI,
+    eventName: 'LiquidityRemoved',
+    onLogs: (logs) => {
+      console.log('LiquidityRemoved event:', logs)
+      // Refetch all market data and LP token balances when liquidity is removed
+      market1.refetch()
+      market2.refetch()
+      market3.refetch()
+      userLPTokens1.refetch()
+      userLPTokens2.refetch()
+      userLPTokens3.refetch()
+    },
+  })
+
+  // Transform contract data into markets
+  const markets = useMemo(() => {
+    const marketData = [
+      { contract: market1, id: 1 },
+      { contract: market2, id: 2 },
+      { contract: market3, id: 3 },
+    ]
+
+    return marketData.map(({ contract, id }) => {
+      const metadata = MARKET_METADATA[id as keyof typeof MARKET_METADATA]
+      const isLoading = contract.isLoading
+
+      if (isLoading) {
+        return {
+          id,
+          name: metadata.name,
+          totalLiquidity: '0 STT',
+          volume24h: '0 STT',
+          fees24h: '0 STT',
+          apy: 0,
+          price: '0 STT',
+          change24h: 0,
+          liquidityHistory: [],
+          isLoading: true,
+        }
+      }
+
+      if (!contract.market) {
+        return {
+          id,
+          name: metadata.name,
+          totalLiquidity: '0 STT',
+          volume24h: '0 STT',
+          fees24h: '0 STT',
+          apy: 0,
+          price: '0 STT',
+          change24h: 0,
+          liquidityHistory: [],
+          isLoading: false,
+        }
+      }
+
+      const reserveA = contract.market.reserveA
+      const reserveB = contract.market.reserveB
+      const totalSupply = contract.market.totalSupply
+
+      // Calculate liquidity and price
+      const liquidity = formatEther(reserveA + reserveB)
+      const price = reserveB > 0n ? formatEther((reserveA * 1000n) / reserveB) : '0'
+
+      // Generate mock liquidity history (would come from events in real app)
+      const liquidityHistory = Array.from({ length: 30 }, (_, i) => ({
+        date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        liquidity: parseFloat(liquidity) + Math.random() * 10 - 5,
+        fees: Math.random() * 0.1
+      }))
+
+      return {
+        id,
+        name: metadata.name,
+        totalLiquidity: `${liquidity} STT`,
+        volume24h: '0 STT', // Would need historical data
+        fees24h: '0 STT', // Would need historical data
+        apy: Math.random() * 20, // Would need historical data
+        price: `${price} STT`,
+        change24h: 0, // Would need historical data
+        liquidityHistory,
+        isLoading: false,
+      }
+    })
+  }, [market1, market2, market3])
+
+  // Calculate user's liquidity positions based on LP token balances
+  const positions = useMemo(() => {
+    if (!address) return []
+    
+    const positions: LiquidityPosition[] = []
+    
+    // Check each market for LP token balance
+    const marketData = [
+      { market: market1, lpTokens: userLPTokens1, id: 1 },
+      { market: market2, lpTokens: userLPTokens2, id: 2 },
+      { market: market3, lpTokens: userLPTokens3, id: 3 },
+    ]
+    
+    marketData.forEach(({ market, lpTokens, id }) => {
+      if (market.market && lpTokens.lpTokens && lpTokens.lpTokens > 0n) {
+        const metadata = MARKET_METADATA[id as keyof typeof MARKET_METADATA]
+        const lpTokenBalance = lpTokens.lpTokens
+        const totalSupply = market.market.totalSupply
+        
+        // Calculate user's share percentage
+        const share = totalSupply > 0n ? (Number(lpTokenBalance * 10000n / totalSupply) / 100) : 0
+        
+        // Calculate user's token amounts based on their LP token share
+        const reserveA = market.market.reserveA
+        const reserveB = market.market.reserveB
+        const userAmountA = (reserveA * lpTokenBalance) / totalSupply
+        const userAmountB = (reserveB * lpTokenBalance) / totalSupply
+        
+        positions.push({
+          id: `position-${id}`,
+          marketId: id,
+          marketName: metadata.name,
+          tokenA: 'STT',
+          tokenB: 'STT',
+          amountA: formatEther(userAmountA),
+          amountB: formatEther(userAmountB),
+          lpTokens: formatEther(lpTokenBalance),
+          share,
+          feesEarned: '0.0', // Would need to track fees earned
+          apy: Math.random() * 20, // Would need historical data
+          status: 'active' as const,
+          createdAt: new Date().toISOString(),
+        })
+      }
+    })
+    
+    return positions
+  }, [address, market1, market2, market3, userLPTokens1, userLPTokens2, userLPTokens3])
+
+  const selectedMarket = useMemo(() => {
     if (marketId) {
-      const market = markets.find(m => m.id === parseInt(marketId))
-      setSelectedMarket(market || null)
+      return markets.find(m => m.id === parseInt(marketId)) || null
     }
+    return null
   }, [marketId, markets])
 
   const handleAddLiquidity = async () => {
@@ -166,51 +277,54 @@ function LiquidityContent() {
       return
     }
 
-    setIsAdding(true)
-    
+    if (!address) {
+      toast.error('Please connect your wallet first')
+      return
+    }
+
     try {
-      // Simulate adding liquidity
-      await new Promise(resolve => setTimeout(resolve, 3000))
+      // Add liquidity to the market
+      await addLiquidityHook.addLiquidity(
+        parseInt(addLiquidity.marketId),
+        addLiquidity.amountA,
+        addLiquidity.amountB
+      )
       
-      const newPosition: LiquidityPosition = {
-        id: Math.random().toString(36).substr(2, 9),
-        marketId: parseInt(addLiquidity.marketId),
-        marketName: markets.find(m => m.id === parseInt(addLiquidity.marketId))?.name || 'Unknown',
-        tokenA: 'STT',
-        tokenB: 'ETH',
-        amountA: addLiquidity.amountA,
-        amountB: addLiquidity.amountB,
-        lpTokens: (parseFloat(addLiquidity.amountA) * parseFloat(addLiquidity.amountB)).toFixed(3),
-        share: Math.random() * 20,
-        feesEarned: '0.00',
-        apy: Math.random() * 20,
-        status: 'active',
-        createdAt: new Date().toISOString().split('T')[0]
-      }
-      
-      setPositions(prev => [...prev, newPosition])
       setAddLiquidity({ amountA: '', amountB: '', marketId: addLiquidity.marketId })
       toast.success('Liquidity added successfully')
+      
+      // Refetch market data and LP token balances after successful transaction
+      setTimeout(() => {
+        market1.refetch()
+        market2.refetch()
+        market3.refetch()
+        userLPTokens1.refetch()
+        userLPTokens2.refetch()
+        userLPTokens3.refetch()
+      }, 2000)
     } catch (error) {
-      toast.error('Failed to add liquidity')
-    } finally {
-      setIsAdding(false)
+      console.error('Add liquidity error:', error)
+      toast.error('Failed to add liquidity: ' + (error as Error).message)
     }
   }
 
   const handleRemoveLiquidity = async (positionId: string) => {
-    setIsRemoving(true)
-    
+    if (!address) {
+      toast.error('Please connect your wallet first')
+      return
+    }
+
     try {
-      // Simulate removing liquidity
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // Remove liquidity from the market
+      await removeLiquidityHook.removeLiquidity(
+        parseInt(positionId), // Assuming positionId is marketId for now
+        '1.0' // Would need to get actual LP token amount
+      )
       
-      setPositions(prev => prev.filter(p => p.id !== positionId))
       toast.success('Liquidity removed successfully')
     } catch (error) {
-      toast.error('Failed to remove liquidity')
-    } finally {
-      setIsRemoving(false)
+      console.error('Remove liquidity error:', error)
+      toast.error('Failed to remove liquidity: ' + (error as Error).message)
     }
   }
 
@@ -373,8 +487,11 @@ function LiquidityContent() {
                 <p className="text-white/80 mb-4">
                   Start earning fees by providing liquidity to markets
                 </p>
-                <Button asChild className="bg-white/20 hover:bg-white/30 text-white border-white/30">
-                  <a href="#add">Add Liquidity</a>
+                <Button 
+                  onClick={() => setActiveTab('add')}
+                  className="bg-white/20 hover:bg-white/30 text-white border-white/30"
+                >
+                  Add Liquidity
                 </Button>
               </CardContent>
             </Card>
@@ -397,45 +514,57 @@ function LiquidityContent() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-white">
-                      <span className="text-sm text-white/70">Total Liquidity</span>
-                      <span className="font-semibold">{market.totalLiquidity}</span>
+                  {market.isLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin text-white/70" />
                     </div>
-                    <div className="flex justify-between text-white">
-                      <span className="text-sm text-white/70">24h Volume</span>
-                      <span className="font-semibold">{market.volume24h}</span>
-                    </div>
-                    <div className="flex justify-between text-white">
-                      <span className="text-sm text-white/70">24h Fees</span>
-                      <span className="font-semibold">{market.fees24h}</span>
-                    </div>
-                    <div className="flex justify-between text-white">
-                      <span className="text-sm text-white/70">APY</span>
-                      <span className="font-semibold text-green-400">{market.apy.toFixed(1)}%</span>
-                    </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-white">
+                          <span className="text-sm text-white/70">Total Liquidity</span>
+                          <span className="font-semibold">{market.totalLiquidity}</span>
+                        </div>
+                        <div className="flex justify-between text-white">
+                          <span className="text-sm text-white/70">24h Volume</span>
+                          <span className="font-semibold">{market.volume24h}</span>
+                        </div>
+                        <div className="flex justify-between text-white">
+                          <span className="text-sm text-white/70">24h Fees</span>
+                          <span className="font-semibold">{market.fees24h}</span>
+                        </div>
+                        <div className="flex justify-between text-white">
+                          <span className="text-sm text-white/70">APY</span>
+                          <span className="font-semibold text-green-400">{market.apy.toFixed(1)}%</span>
+                        </div>
+                      </div>
 
-                  <div className="h-24">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={market.liquidityHistory.slice(-7)}>
-                        <Area 
-                          type="monotone" 
-                          dataKey="liquidity" 
-                          stroke="#3b82f6" 
-                          fill="#3b82f6" 
-                          fillOpacity={0.3}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
+                      <div className="h-24">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={market.liquidityHistory.slice(-7)}>
+                            <Area 
+                              type="monotone" 
+                              dataKey="liquidity" 
+                              stroke="#3b82f6" 
+                              fill="#3b82f6" 
+                              fillOpacity={0.3}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
 
-                  <Button className="w-full" asChild>
-                    <a href={`/liquidity?market=${market.id}`}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Liquidity
-                    </a>
-                  </Button>
+                      <Button 
+                        className="w-full"
+                        onClick={() => {
+                          setActiveTab('add')
+                          setAddLiquidity(prev => ({ ...prev, marketId: market.id.toString() }))
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Liquidity
+                      </Button>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             ))}
@@ -528,15 +657,31 @@ function LiquidityContent() {
                 </AlertDescription>
               </Alert>
 
+              {addLiquidityHook.error && (
+                <Alert className="bg-red-500/20 border-red-400/30">
+                  <AlertDescription className="text-red-300">
+                    Error: {addLiquidityHook.error.message}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {addLiquidityHook.hash && (
+                <Alert className="bg-blue-500/20 border-blue-400/30">
+                  <AlertDescription className="text-blue-300">
+                    Transaction Hash: {addLiquidityHook.hash}
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <Button 
                 onClick={handleAddLiquidity} 
-                disabled={isAdding || !addLiquidity.amountA || !addLiquidity.amountB}
+                disabled={addLiquidityHook.isPending || addLiquidityHook.isConfirming || !addLiquidity.amountA || !addLiquidity.amountB}
                 className="w-full bg-white/20 hover:bg-white/30 text-white border-white/30"
               >
-                {isAdding ? (
+                {addLiquidityHook.isPending || addLiquidityHook.isConfirming ? (
                   <>
-                    <Clock className="h-4 w-4 mr-2 animate-spin" />
-                    Adding Liquidity...
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {addLiquidityHook.isPending ? 'Confirming...' : 'Adding Liquidity...'}
                   </>
                 ) : (
                   <>

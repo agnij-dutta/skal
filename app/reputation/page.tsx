@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,9 +19,13 @@ import {
   Star,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
+import { useGetReputation, useGetActiveAgentsByType } from '@/lib/contracts/hooks'
+import { AgentType } from '@/lib/contracts/hooks/useAgentRegistry'
+import { useAccount } from 'wagmi'
 
 interface Provider {
   id: string
@@ -123,14 +127,38 @@ const categoryStats = [
 ]
 
 export default function ReputationPage() {
-  const [providers, setProviders] = useState<Provider[]>(mockProviders)
-  const [filteredProviders, setFilteredProviders] = useState<Provider[]>(mockProviders)
+  const { address } = useAccount()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [sortBy, setSortBy] = useState('reputation')
 
-  useEffect(() => {
-    let filtered = providers
+  // Fetch provider agents
+  const providers = useGetActiveAgentsByType(AgentType.Provider)
+
+  // Transform contract data into providers
+  const providersData = useMemo(() => {
+    if (!providers.agents || providers.isLoading) {
+      return []
+    }
+
+    return providers.agents.map((agent, index) => ({
+      id: agent.id.toString(),
+      address: agent.agentAddress,
+      name: `Provider #${agent.id}`,
+      reputation: 0, // Would need to fetch from ReputationManager
+      commits: 0, // Would need to fetch from CommitRegistry
+      successRate: 0, // Would need to calculate from verification data
+      totalEarnings: '0 STT', // Would need to fetch from EscrowManager
+      joinDate: new Date().toISOString().split('T')[0], // Would need to fetch from AgentRegistry
+      category: 'DeFi', // Would need to fetch from agent metadata
+      recentActivity: [], // Would need to fetch from events
+      reputationHistory: [], // Would need to fetch from ReputationManager
+      isLoading: false,
+    }))
+  }, [providers])
+
+  const filteredProviders = useMemo(() => {
+    let filtered = providersData
 
     // Apply search filter
     if (searchTerm) {
@@ -161,8 +189,8 @@ export default function ReputationPage() {
       }
     })
 
-    setFilteredProviders(filtered)
-  }, [providers, searchTerm, selectedCategory, sortBy])
+    return filtered
+  }, [providersData, searchTerm, selectedCategory, sortBy])
 
   const getReputationColor = (reputation: number) => {
     if (reputation >= 950) return 'text-green-400'
@@ -197,7 +225,13 @@ export default function ReputationPage() {
             <Users className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{providers.length}</div>
+            <div className="text-2xl font-bold text-white">
+              {providers.isLoading ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                providersData.length
+              )}
+            </div>
             <p className="text-xs text-white/70">Active agents</p>
           </CardContent>
         </Card>
@@ -209,7 +243,11 @@ export default function ReputationPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-white">
-              {Math.round(providers.reduce((acc, p) => acc + p.reputation, 0) / providers.length)}
+              {providers.isLoading ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                providersData.length > 0 ? Math.round(providersData.reduce((acc, p) => acc + p.reputation, 0) / providersData.length) : 0
+              )}
             </div>
             <p className="text-xs text-white/70">Across all providers</p>
           </CardContent>
@@ -222,7 +260,11 @@ export default function ReputationPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-white">
-              {providers.reduce((acc, p) => acc + p.commits, 0)}
+              {providers.isLoading ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                providersData.reduce((acc, p) => acc + p.commits, 0)
+              )}
             </div>
             <p className="text-xs text-white/70">This month</p>
           </CardContent>
@@ -235,7 +277,11 @@ export default function ReputationPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-white">
-              {Math.round(providers.reduce((acc, p) => acc + p.successRate, 0) / providers.length)}%
+              {providers.isLoading ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                providersData.length > 0 ? Math.round(providersData.reduce((acc, p) => acc + p.successRate, 0) / providersData.length) : 0
+              )}%
             </div>
             <p className="text-xs text-white/70">Average accuracy</p>
           </CardContent>
@@ -357,27 +403,33 @@ export default function ReputationPage() {
               <CardDescription className="text-white/80">Highest reputation providers</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {filteredProviders.slice(0, 5).map((provider, index) => (
-                  <div key={provider.id} className="flex items-center justify-between p-3 rounded-lg border border-white/20 bg-white/5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-                        <span className="font-bold text-sm text-white">{index + 1}</span>
+              {providers.isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-white/70" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredProviders.slice(0, 5).map((provider, index) => (
+                    <div key={provider.id} className="flex items-center justify-between p-3 rounded-lg border border-white/20 bg-white/5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                          <span className="font-bold text-sm text-white">{index + 1}</span>
+                        </div>
+                        <div>
+                          <p className="font-medium text-white">{provider.name}</p>
+                          <p className="text-sm text-white/70">{provider.address}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-white">{provider.name}</p>
-                        <p className="text-sm text-white/70">{provider.address}</p>
+                      <div className="text-right">
+                        <div className={`font-bold ${getReputationColor(provider.reputation)}`}>
+                          {provider.reputation}
+                        </div>
+                        {getReputationBadge(provider.reputation)}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className={`font-bold ${getReputationColor(provider.reputation)}`}>
-                        {provider.reputation}
-                      </div>
-                      {getReputationBadge(provider.reputation)}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -390,88 +442,94 @@ export default function ReputationPage() {
           <CardDescription className="text-white/80">Complete list of providers with detailed metrics</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {filteredProviders.map((provider) => (
-              <div key={provider.id} className="p-4 rounded-lg border border-white/20 bg-white/5 hover:bg-white/10 transition-all duration-300">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
-                      <span className="font-bold text-white">{provider.name[0]}</span>
+          {providers.isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-white/70" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredProviders.map((provider) => (
+                <div key={provider.id} className="p-4 rounded-lg border border-white/20 bg-white/5 hover:bg-white/10 transition-all duration-300">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                        <span className="font-bold text-white">{provider.name[0]}</span>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-lg text-white">{provider.name}</h3>
+                        <p className="text-white/70">{provider.address}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {getReputationBadge(provider.reputation)}
+                          <Badge variant="outline" className="bg-white/20 text-white border-white/30">{provider.category}</Badge>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-2xl font-bold ${getReputationColor(provider.reputation)}`}>
+                        {provider.reputation}
+                      </div>
+                      <p className="text-sm text-white/70">Reputation</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div>
+                      <p className="text-sm text-white/70">Commits</p>
+                      <p className="font-semibold text-white">{provider.commits}</p>
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg text-white">{provider.name}</h3>
-                      <p className="text-white/70">{provider.address}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        {getReputationBadge(provider.reputation)}
-                        <Badge variant="outline" className="bg-white/20 text-white border-white/30">{provider.category}</Badge>
-                      </div>
+                      <p className="text-sm text-white/70">Success Rate</p>
+                      <p className="font-semibold text-green-400">{provider.successRate}%</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-white/70">Earnings</p>
+                      <p className="font-semibold text-white">{provider.totalEarnings}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-white/70">Joined</p>
+                      <p className="font-semibold text-white">{new Date(provider.joinDate).toLocaleDateString()}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className={`text-2xl font-bold ${getReputationColor(provider.reputation)}`}>
-                      {provider.reputation}
+
+                  {/* Reputation History Chart */}
+                  <div className="h-32">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={provider.reputationHistory}>
+                        <Line 
+                          type="monotone" 
+                          dataKey="score" 
+                          stroke="#3b82f6" 
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Recent Activity */}
+                  <div className="mt-4">
+                    <h4 className="font-medium mb-2 text-white">Recent Activity</h4>
+                    <div className="space-y-2">
+                      {provider.recentActivity.slice(0, 3).map((activity, index) => (
+                        <div key={index} className="flex items-center gap-2 text-sm">
+                          {activity.type === 'commit' && <Clock className="h-4 w-4 text-blue-400" />}
+                          {activity.type === 'verify' && <CheckCircle className="h-4 w-4 text-green-400" />}
+                          {activity.type === 'dispute' && <AlertCircle className="h-4 w-4 text-red-400" />}
+                          <span className="capitalize text-white">{activity.type}</span>
+                          {activity.score && (
+                            <Badge variant="outline" className="text-xs bg-white/20 text-white border-white/30">
+                              {activity.score}%
+                            </Badge>
+                          )}
+                          <span className="text-white/70">{activity.timestamp}</span>
+                        </div>
+                      ))}
                     </div>
-                    <p className="text-sm text-white/70">Reputation</p>
                   </div>
                 </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                  <div>
-                    <p className="text-sm text-white/70">Commits</p>
-                    <p className="font-semibold text-white">{provider.commits}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-white/70">Success Rate</p>
-                    <p className="font-semibold text-green-400">{provider.successRate}%</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-white/70">Earnings</p>
-                    <p className="font-semibold text-white">{provider.totalEarnings}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-white/70">Joined</p>
-                    <p className="font-semibold text-white">{new Date(provider.joinDate).toLocaleDateString()}</p>
-                  </div>
-                </div>
-
-                {/* Reputation History Chart */}
-                <div className="h-32">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={provider.reputationHistory}>
-                      <Line 
-                        type="monotone" 
-                        dataKey="score" 
-                        stroke="#3b82f6" 
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Recent Activity */}
-                <div className="mt-4">
-                  <h4 className="font-medium mb-2 text-white">Recent Activity</h4>
-                  <div className="space-y-2">
-                    {provider.recentActivity.slice(0, 3).map((activity, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm">
-                        {activity.type === 'commit' && <Clock className="h-4 w-4 text-blue-400" />}
-                        {activity.type === 'verify' && <CheckCircle className="h-4 w-4 text-green-400" />}
-                        {activity.type === 'dispute' && <AlertCircle className="h-4 w-4 text-red-400" />}
-                        <span className="capitalize text-white">{activity.type}</span>
-                        {activity.score && (
-                          <Badge variant="outline" className="text-xs bg-white/20 text-white border-white/30">
-                            {activity.score}%
-                          </Badge>
-                        )}
-                        <span className="text-white/70">{activity.timestamp}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

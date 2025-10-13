@@ -90,17 +90,36 @@ async function main() {
   // Create some test markets
   console.log("\n🏪 Creating test markets...");
   
-  // Market 1: ETH Price Prediction (using ETH as base token)
-  await ammEngine.createMarket(1, ethers.ZeroAddress, "0x0000000000000000000000000000000000000001"); // ETH to different token
+  // For native-only STT pools, we now allow tokenA == tokenB == address(0)
+  // Market 1: ETH Price Prediction (native STT for both sides)
+  await ammEngine.createMarket(1, ethers.ZeroAddress, ethers.ZeroAddress);
   console.log("✅ Market 1 created: ETH Price Prediction");
 
-  // Market 2: DeFi Signals
-  await ammEngine.createMarket(2, ethers.ZeroAddress, "0x0000000000000000000000000000000000000002");
+  // Market 2: DeFi Signals (native STT for both sides)
+  await ammEngine.createMarket(2, ethers.ZeroAddress, ethers.ZeroAddress);
   console.log("✅ Market 2 created: DeFi Signals");
 
-  // Market 3: NLP Embeddings
-  await ammEngine.createMarket(3, ethers.ZeroAddress, "0x0000000000000000000000000000000000000003");
+  // Market 3: NLP Embeddings (native STT for both sides)
+  await ammEngine.createMarket(3, ethers.ZeroAddress, ethers.ZeroAddress);
   console.log("✅ Market 3 created: NLP Embeddings");
+
+  // Add initial liquidity to markets
+  console.log("\n💰 Adding initial liquidity...");
+  
+  try {
+    // Add 0.1 STT liquidity to each market
+    const liquidityAmount = ethers.parseEther("0.1");
+    await ammEngine.addLiquidity(1, liquidityAmount, liquidityAmount, { value: liquidityAmount + liquidityAmount });
+    console.log("✅ Added liquidity to Market 1");
+    
+    await ammEngine.addLiquidity(2, liquidityAmount, liquidityAmount, { value: liquidityAmount + liquidityAmount });
+    console.log("✅ Added liquidity to Market 2");
+    
+    await ammEngine.addLiquidity(3, liquidityAmount, liquidityAmount, { value: liquidityAmount + liquidityAmount });
+    console.log("✅ Added liquidity to Market 3");
+  } catch (error) {
+    console.log("⚠️  Could not add initial liquidity:", error.message);
+  }
 
   // Summary
   console.log("\n🎉 Deployment completed successfully!");

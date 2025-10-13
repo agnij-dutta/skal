@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -16,10 +16,14 @@ import {
   Shield,
   ArrowUpRight,
   ArrowDownRight,
-  Eye
+  Eye,
+  Loader2
 } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
 import Link from 'next/link'
+import { useGetMarket, useGetMarketTasks, useGetActiveAgentsByType, useGetReputation } from '@/lib/contracts/hooks'
+import { AgentType } from '@/lib/contracts/hooks/useAgentRegistry'
+import { formatEther } from 'viem'
 
 interface MarketData {
   id: number
@@ -50,53 +54,143 @@ interface MarketData {
     commits: number
     successRate: number
   }[]
+  isLoading?: boolean
 }
 
-const mockMarketData: Record<number, MarketData> = {
+// Market metadata - this would ideally come from a config or database
+const MARKET_METADATA = {
   1: {
-    id: 1,
     name: 'ETH Price Prediction',
     description: '1-hour Ethereum price predictions with 0.5% accuracy threshold',
     category: 'DeFi',
-    liquidity: '12.5 STT',
-    volume24h: '8.2 STT',
-    price: '0.05 STT',
-    change24h: 12.5,
-    providers: 15,
-    commits: 142,
-    status: 'active',
-    bondingCurve: Array.from({ length: 20 }, (_, i) => ({
-      x: i * 5,
-      y: 100 - (i * 4),
-      price: 0.05 + (i * 0.002)
-    })),
-    recentActivity: [
-      { type: 'commit', timestamp: '2m ago', user: '0x1234...5678', amount: '0.05 STT' },
-      { type: 'buy', timestamp: '5m ago', user: '0xabcd...efgh', amount: '0.08 STT' },
-      { type: 'reveal', timestamp: '8m ago', user: '0x1234...5678' },
-      { type: 'verify', timestamp: '10m ago', user: 'Verifier #1' },
-      { type: 'commit', timestamp: '15m ago', user: '0x9876...5432', amount: '0.05 STT' },
-    ],
-    topProviders: [
-      { address: '0x1234...5678', reputation: 950, commits: 45, successRate: 98.2 },
-      { address: '0xabcd...efgh', reputation: 920, commits: 32, successRate: 96.8 },
-      { address: '0x9876...5432', reputation: 890, commits: 28, successRate: 94.5 },
-    ]
-  }
-}
+  },
+  2: {
+    name: 'DeFi Signals',
+    description: 'Trading signals for DeFi protocols and yield farming opportunities',
+    category: 'DeFi',
+  },
+  3: {
+    name: 'NLP Embeddings',
+    description: 'High-quality text embeddings for semantic search and similarity',
+    category: 'NLP',
+  },
+} as const
 
 export default function MarketDetailPage() {
   const params = useParams()
   const marketId = parseInt(params.id as string)
-  const [market, setMarket] = useState<MarketData | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
 
-  useEffect(() => {
-    const marketData = mockMarketData[marketId]
-    if (marketData) {
-      setMarket(marketData)
+  // Fetch contract data
+  const marketContract = useGetMarket(marketId)
+  const marketTasks = useGetMarketTasks(marketId)
+  const providers = useGetActiveAgentsByType(AgentType.Provider)
+
+  // Transform contract data into market object
+  const market = useMemo(() => {
+    const metadata = MARKET_METADATA[marketId as keyof typeof MARKET_METADATA]
+    if (!metadata) {
+      return null
     }
-  }, [marketId])
+
+    const isLoading = marketContract.isLoading || marketTasks.isLoading || providers.isLoading
+
+    if (isLoading) {
+      return {
+        id: marketId,
+        name: metadata.name,
+        description: metadata.description,
+        category: metadata.category,
+        liquidity: '0 STT',
+        volume24h: '0 STT',
+        price: '0 STT',
+        change24h: 0,
+        providers: 0,
+        commits: 0,
+        status: 'active' as const,
+        bondingCurve: [],
+        recentActivity: [],
+        topProviders: [],
+        isLoading: true,
+      }
+    }
+
+    if (!marketContract.market) {
+      return {
+        id: marketId,
+        name: metadata.name,
+        description: metadata.description,
+        category: metadata.category,
+        liquidity: '0 STT',
+        volume24h: '0 STT',
+        price: '0 STT',
+        change24h: 0,
+        providers: 0,
+        commits: 0,
+        status: 'closed' as const,
+        bondingCurve: [],
+        recentActivity: [],
+        topProviders: [],
+        isLoading: false,
+      }
+    }
+
+    const reserveA = marketContract.market.reserveA
+    const reserveB = marketContract.market.reserveB
+    const totalSupply = marketContract.market.totalSupply
+
+    // Calculate liquidity and price
+    const liquidity = formatEther(reserveA + reserveB)
+    const price = reserveB > 0n ? formatEther((reserveA * 1000n) / reserveB) : '0'
+    
+    // Get task count
+    const commits = marketTasks.taskIds ? Number(marketTasks.taskIds.length) : 0
+    
+    // Get provider count
+    const providerCount = providers.agents ? providers.agents.length : 0
+
+    // Generate bonding curve data (simplified)
+    const bondingCurve = Array.from({ length: 20 }, (_, i) => {
+      const x = i * 5
+      const y = 100 - (i * 4)
+      const curvePrice = parseFloat(price) + (i * 0.002)
+      return { x, y, price: curvePrice }
+    })
+
+    // Mock recent activity (would come from events in real app)
+    const recentActivity = [
+      { type: 'commit' as const, timestamp: '2m ago', user: '0x1234...5678', amount: '0.05 STT' },
+      { type: 'buy' as const, timestamp: '5m ago', user: '0xabcd...efgh', amount: '0.08 STT' },
+      { type: 'reveal' as const, timestamp: '8m ago', user: '0x1234...5678' },
+      { type: 'verify' as const, timestamp: '10m ago', user: 'Verifier #1' },
+      { type: 'commit' as const, timestamp: '15m ago', user: '0x9876...5432', amount: '0.05 STT' },
+    ]
+
+    // Mock top providers (would come from reputation data in real app)
+    const topProviders = [
+      { address: '0x1234...5678', reputation: 950, commits: 45, successRate: 98.2 },
+      { address: '0xabcd...efgh', reputation: 920, commits: 32, successRate: 96.8 },
+      { address: '0x9876...5432', reputation: 890, commits: 28, successRate: 94.5 },
+    ]
+
+    return {
+      id: marketId,
+      name: metadata.name,
+      description: metadata.description,
+      category: metadata.category,
+      liquidity: `${liquidity} STT`,
+      volume24h: '0 STT', // Would need historical data
+      price: `${price} STT`,
+      change24h: 0, // Would need historical data
+      providers: providerCount,
+      commits,
+      status: marketContract.market.active ? 'active' : 'paused',
+      bondingCurve,
+      recentActivity,
+      topProviders,
+      isLoading: false,
+    }
+  }, [marketId, marketContract, marketTasks, providers])
 
   if (!market) {
     return (
@@ -147,7 +241,13 @@ export default function MarketDetailPage() {
             <DollarSign className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{market.price}</div>
+            <div className="text-2xl font-bold text-white">
+              {market.isLoading ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                market.price
+              )}
+            </div>
             <div className={`flex items-center text-xs ${market.change24h >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               {market.change24h >= 0 ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <ArrowDownRight className="h-3 w-3 mr-1" />}
               {market.change24h >= 0 ? '+' : ''}{market.change24h}%
@@ -161,7 +261,13 @@ export default function MarketDetailPage() {
             <TrendingUp className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{market.liquidity}</div>
+            <div className="text-2xl font-bold text-white">
+              {market.isLoading ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                market.liquidity
+              )}
+            </div>
             <p className="text-xs text-white/70">Available for trading</p>
           </CardContent>
         </Card>
@@ -172,7 +278,13 @@ export default function MarketDetailPage() {
             <Activity className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{market.volume24h}</div>
+            <div className="text-2xl font-bold text-white">
+              {market.isLoading ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                market.volume24h
+              )}
+            </div>
             <p className="text-xs text-white/70">Trading activity</p>
           </CardContent>
         </Card>
@@ -183,7 +295,13 @@ export default function MarketDetailPage() {
             <Users className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{market.providers}</div>
+            <div className="text-2xl font-bold text-white">
+              {market.isLoading ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                market.providers
+              )}
+            </div>
             <p className="text-xs text-white/70">Active agents</p>
           </CardContent>
         </Card>
@@ -263,26 +381,32 @@ export default function MarketDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="h-96">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={market.bondingCurve}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="x" />
-                    <YAxis />
-                    <Tooltip 
-                      formatter={(value, name) => [
-                        `${value} STT`, 
-                        name === 'price' ? 'Price' : 'Supply'
-                      ]}
-                    />
-                    <Area 
-                      type="monotone" 
-                      dataKey="price" 
-                      stroke="#8884d8" 
-                      fill="#8884d8" 
-                      fillOpacity={0.3}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                {market.isLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="h-8 w-8 animate-spin text-white/70" />
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={market.bondingCurve}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="x" />
+                      <YAxis />
+                      <Tooltip 
+                        formatter={(value, name) => [
+                          `${value} STT`, 
+                          name === 'price' ? 'Price' : 'Supply'
+                        ]}
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="price" 
+                        stroke="#8884d8" 
+                        fill="#8884d8" 
+                        fillOpacity={0.3}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </CardContent>
           </Card>
