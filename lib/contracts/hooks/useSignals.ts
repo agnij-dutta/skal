@@ -5,9 +5,10 @@ import { useGetMarketTasks, useGetTask } from './useCommitRegistry'
 import { useGetReputation, useGetReputationScore } from './useReputationManager'
 import { useAccount } from 'wagmi'
 import { formatEther } from 'viem'
-import { useReadContract } from 'wagmi'
+import { useReadContract, useReadContracts } from 'wagmi'
 import { COMMIT_REGISTRY_ABI } from '../abis/commitRegistry'
 import { CONTRACT_ADDRESSES } from '../../somnia-config'
+import { shortenAddress } from '../../utils'
 // import { useTaskDetails } from './useTaskDetails' // Commented out to avoid conflict
 
 interface SignalData {
@@ -105,13 +106,27 @@ export function useSignals(marketId?: number) {
   // Note: Removed reputation fetching to avoid hooks order issues
   // In production, you'd use multicall or batch reads for this
 
-  // Transform task IDs into signal data with realistic generated data
-  const signals = useMemo(() => {
-    const isLoading = market1Tasks.isLoading || market2Tasks.isLoading || market3Tasks.isLoading
+  // Fetch individual task details for each task ID using useReadContracts for batch reading
+  const taskDetails = useReadContracts({
+    contracts: allTaskIds.map(({ taskId }) => ({
+      address: CONTRACT_ADDRESSES.COMMIT_REGISTRY as `0x${string}`,
+      abi: COMMIT_REGISTRY_ABI as any,
+      functionName: 'getTask',
+      args: [BigInt(taskId)],
+    })),
+    query: {
+      enabled: allTaskIds.length > 0,
+    },
+  })
 
-    return allTaskIds.map(({ taskId, marketId }) => {
+  // Transform task IDs into signal data with real contract data
+  const signals = useMemo(() => {
+    const isLoading = market1Tasks.isLoading || market2Tasks.isLoading || market3Tasks.isLoading || taskDetails.isLoading
+
+    return allTaskIds.map(({ taskId, marketId }, index) => {
       const metadata = MARKET_METADATA[marketId as keyof typeof MARKET_METADATA]
       const taskIdNum = Number(taskId)
+      const taskDetail = taskDetails.data?.[index]
       
       if (isLoading) {
         return {
@@ -131,24 +146,45 @@ export function useSignals(marketId?: number) {
         }
       }
 
-      // Generate realistic data based on taskId
+      // Use real contract data if available
       let providerAddress = '0x...'
-      if (taskIdNum <= 5) {
-        // Use realistic addresses for first few tasks
-        providerAddress = `0x${taskIdNum.toString(16).padStart(8, '0')}...${taskIdNum.toString(16).slice(-4)}`
-      } else {
-        providerAddress = `0x${taskIdNum.toString(16).padStart(8, '0')}...${taskIdNum.toString(16).slice(-4)}`
+      let stake = '0 STT'
+      let timestamp = 0
+      let state = 0
+      let validationScore = 0
+
+      if (taskDetail?.result) {
+        const task = taskDetail.result as any
+        providerAddress = task.provider || '0x...'
+        stake = task.stake ? formatEther(task.stake) + ' STT' : '0 STT'
+        timestamp = Number(task.timestamp || 0)
+        state = Number(task.state || 0)
+        validationScore = Number(task.validationScore || 0)
       }
 
-      // Calculate time ago
-      const timeAgo = taskIdNum % 60
+      // Calculate time ago from timestamp
+      const now = Math.floor(Date.now() / 1000)
+      const timeAgo = timestamp > 0 ? Math.floor((now - timestamp) / 60) : taskIdNum % 60
       
-      // Calculate reputation based on task ID (simplified to avoid hooks order issues)
+      // Map task state to signal status
+      const getStatusFromTaskState = (state: number) => {
+        switch (state) {
+          case 0: return 'available' // Committed
+          case 1: return 'available' // Revealed
+          case 2: return 'verified'  // Validated
+          case 3: return 'settled'   // Settled
+          case 4: return 'available' // Disputed
+          case 5: return 'available' // Cancelled
+          default: return 'available'
+        }
+      }
+
+      // Calculate reputation based on validation score and task ID
       const baseReputation = 500
-      const validationBonus = (taskIdNum % 10) * 50
+      const validationBonus = validationScore * 50
       const providerReputation = Math.min(1000, baseReputation + validationBonus + (taskIdNum % 200))
 
-      // Calculate price based on market
+      // Calculate price based on stake and market
       const basePrice = 0.05
       const marketMultiplier = marketId === 1 ? 1.2 : marketId === 2 ? 1.0 : 0.8
       const price = (basePrice * marketMultiplier + (taskIdNum % 10) * 0.01).toFixed(3)
@@ -158,23 +194,23 @@ export function useSignals(marketId?: number) {
         taskId: taskIdNum,
         marketId,
         marketName: metadata.name,
-        provider: providerAddress,
+        provider: shortenAddress(providerAddress),
         providerReputation,
         description: `AI output for ${metadata.name}`,
         price: `${price} STT`,
-        stake: '0.05 STT',
+        stake,
         commitTime: `${timeAgo} minutes ago`,
-        status: 'available' as const,
+        status: getStatusFromTaskState(state),
         category: metadata.category,
         isLoading: false,
       }
     })
-  }, [allTaskIds, market1Tasks.isLoading, market2Tasks.isLoading, market3Tasks.isLoading, uniqueProviders])
+  }, [allTaskIds, market1Tasks.isLoading, market2Tasks.isLoading, market3Tasks.isLoading, taskDetails.data, taskDetails.isLoading])
 
   return {
     signals,
-    isLoading: market1Tasks.isLoading || market2Tasks.isLoading || market3Tasks.isLoading,
-    error: market1Tasks.error || market2Tasks.error || market3Tasks.error,
+    isLoading: market1Tasks.isLoading || market2Tasks.isLoading || market3Tasks.isLoading || taskDetails.isLoading,
+    error: market1Tasks.error || market2Tasks.error || market3Tasks.error || taskDetails.error,
   }
 }
 

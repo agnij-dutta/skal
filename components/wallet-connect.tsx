@@ -7,6 +7,7 @@ import { Button } from './ui/button'
 import { Wallet, LogOut, Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { injected } from 'wagmi/connectors'
+import { shortenAddress } from '@/lib/utils'
 
 interface WalletConnectProps {
   className?: string
@@ -81,9 +82,6 @@ export function WalletConnect({ className }: WalletConnectProps) {
     }
   }
 
-  const formatAddress = (addr: string) => {
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
-  }
 
   if (isConnected && address) {
     return (
@@ -101,7 +99,7 @@ export function WalletConnect({ className }: WalletConnectProps) {
           className="bg-white/10 border-white/20 text-white hover:bg-white/20"
         >
           <LogOut className="h-4 w-4 mr-2" />
-          {formatAddress(address)}
+          {shortenAddress(address)}
         </Button>
       </div>
     )
