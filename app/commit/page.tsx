@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { useCommitTask, useRevealTask, useGetTask, useWatchCommitRegistryEvents } from '@/lib/contracts/hooks'
+import { useCommitTask, useRevealTask, useGetTask, useWatchCommitRegistryEvents, useWatchEscrowManagerEvents } from '@/lib/contracts/hooks'
 import { storageClient } from '@/lib/storage-client'
 import { useAccount } from 'wagmi'
 
@@ -32,7 +32,7 @@ interface CommitStep {
   status: 'pending' | 'current' | 'completed'
 }
 
-const steps: CommitStep[] = [
+const baseSteps: CommitStep[] = [
   {
     id: 'prepare',
     title: 'Prepare Output',
@@ -88,37 +88,57 @@ function CommitContent() {
   const [taskId, setTaskId] = useState<number | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [uploadResult, setUploadResult] = useState<any>(null)
+  const [buyerAddress, setBuyerAddress] = useState<string | null>(null)
+  const [verificationScore, setVerificationScore] = useState<number | null>(null)
+  const [payoutAmount, setPayoutAmount] = useState<string | null>(null)
 
   // Contract hooks
   const commitTask = useCommitTask()
   const revealTask = useRevealTask()
   const taskData = useGetTask(taskId || undefined)
 
-  // Watch for events
+  // Watch for CommitRegistry events (commit, reveal, validate, settle)
   useWatchCommitRegistryEvents(
     (event) => {
       if (event.provider.toLowerCase() === address?.toLowerCase()) {
         setTaskId(Number(event.taskId))
         setCurrentStep(2) // Move to waiting for buyer
+        taskData.refetch?.()
         toast.success('Commit submitted successfully!')
       }
     },
     (event) => {
       if (taskId && Number(event.taskId) === taskId) {
-        setCurrentStep(3) // Move to reveal step
-        toast.success('Buyer found! You can now reveal your data.')
-      }
-    },
-    (event) => {
-      if (taskId && Number(event.taskId) === taskId) {
-        setCurrentStep(4) // Move to verification
+        setCurrentStep(4) // Move to verification after reveal
+        taskData.refetch?.()
         toast.success('Data revealed successfully!')
       }
     },
     (event) => {
       if (taskId && Number(event.taskId) === taskId) {
+        // Verification completed (score available)
+        setVerificationScore(Number(event.score))
+        setCurrentStep(4)
+        taskData.refetch?.()
+      }
+    },
+    (event) => {
+      if (taskId && Number(event.taskId) === taskId) {
+        setPayoutAmount(event.payout.toString())
         setCurrentStep(5) // Move to settlement
-        toast.success('Verification complete! Payment processed.')
+        taskData.refetch?.()
+        toast.success('Settlement complete!')
+      }
+    }
+  )
+
+  // Watch for EscrowManager events (buyer locks funds)
+  useWatchEscrowManagerEvents(
+    (event) => {
+      if (taskId && Number(event.taskId) === taskId) {
+        setBuyerAddress(event.buyer)
+        setCurrentStep(3) // Move to reveal step
+        toast.success('Buyer found! You can now reveal your data.')
       }
     }
   )
@@ -235,6 +255,12 @@ function CommitContent() {
       return <div className="h-5 w-5 rounded-full border-2 border-muted-foreground" />
     }
   }
+
+  // Derive step statuses from currentStep
+  const steps: CommitStep[] = baseSteps.map((s, idx) => ({
+    ...s,
+    status: idx < currentStep ? 'completed' : idx === currentStep ? 'current' : 'pending'
+  }))
 
   const renderStepContent = () => {
     switch (currentStep) {

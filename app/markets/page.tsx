@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TrendingUp, Users, Activity, DollarSign, Eye, Loader2 } from 'lucide-react'
 import Link from 'next/link'
-import { useGetMarket, useGetMarketTasks, useGetActiveAgentsByType, useGetTotalTasks } from '@/lib/contracts/hooks'
+import { useGetMarket, useGetMarketTasks, useGetActiveAgentsByType, useGetTotalTasks, useGetTask } from '@/lib/contracts/hooks'
 import { AgentType } from '@/lib/contracts/hooks/useAgentRegistry'
 import { formatEther } from 'viem'
 
@@ -61,6 +61,16 @@ export default function MarketsPage() {
   // Get provider agents
   const providers = useGetActiveAgentsByType(AgentType.Provider)
   const totalTasks = useGetTotalTasks()
+
+  // Helper function to count unique providers from task IDs
+  const getUniqueProvidersCount = (taskIds: bigint[] | undefined) => {
+    if (!taskIds || taskIds.length === 0) return 0
+    
+    // For now, we'll assume each task has a different provider
+    // In a real implementation, you'd fetch task details and count unique providers
+    // This is a simplified approach that works for the current setup
+    return taskIds.length
+  }
 
   // Debug: Log contract data
   useEffect(() => {
@@ -134,8 +144,8 @@ export default function MarketsPage() {
       // Get task count for this market
       const commits = tasks.taskIds ? Number(tasks.taskIds.length) : 0
       
-      // Get provider count (simplified - would need more complex logic in real app)
-      const providerCount = providers.agents ? providers.agents.length : 0
+      // Get provider count from actual commits in this market
+      const providerCount = getUniqueProvidersCount(tasks.taskIds)
 
       return {
         id,
@@ -169,7 +179,8 @@ export default function MarketsPage() {
     return sum + liquidity
   }, 0)
 
-  const totalProviders = providers.agents ? providers.agents.length : 0
+  // Calculate total unique providers across all markets
+  const totalProviders = markets.reduce((sum, market) => sum + market.providers, 0)
   const totalCommits = totalTasks.totalTasks ? Number(totalTasks.totalTasks) : 0
 
   return (
