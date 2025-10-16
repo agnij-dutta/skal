@@ -26,6 +26,7 @@ interface UserSignalsContextType {
   addPurchasedSignal: (signal: Omit<PurchasedSignal, 'purchaseTime'>) => void
   removePurchasedSignal: (signalId: string) => void
   updateSignalStatus: (signalId: string, status: PurchasedSignal['status']) => void
+  updateSignalStatusByTaskId: (taskId: number, status: PurchasedSignal['status']) => void
   getSignalById: (signalId: string) => PurchasedSignal | undefined
 }
 
@@ -85,6 +86,12 @@ export function UserSignalsProvider({ children }: { children: React.ReactNode })
     )
   }
 
+  const updateSignalStatusByTaskId = (taskId: number, status: PurchasedSignal['status']) => {
+    setPurchasedSignals(prev => 
+      prev.map(s => s.taskId === taskId ? { ...s, status } : s)
+    )
+  }
+
   const getSignalById = (signalId: string) => {
     return purchasedSignals.find(s => s.id === signalId)
   }
@@ -95,6 +102,7 @@ export function UserSignalsProvider({ children }: { children: React.ReactNode })
       addPurchasedSignal,
       removePurchasedSignal,
       updateSignalStatus,
+      updateSignalStatusByTaskId,
       getSignalById,
     }}>
       {children}

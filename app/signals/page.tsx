@@ -25,7 +25,8 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { useLockFunds, useGetReputation, useGetActiveAgentsByType } from '@/lib/contracts/hooks'
+import { useLockFunds, useGetReputation, useGetActiveAgentsByType, useWatchCommitRegistryEvents, useWatchEscrowManagerEvents, useGetTask } from '@/lib/contracts/hooks'
+import { decryptData, fetchFromIPFS, storageClient } from '@/lib/storage-client'
 import { useSignals, useUserSignals, useAvailableSignals, useVerifiedSignals } from '@/lib/contracts/hooks/useSignals'
 import { useUserSignalsContext } from '@/lib/contexts/UserSignalsContext'
 import { AgentType } from '@/lib/contracts/hooks/useAgentRegistry'
@@ -83,7 +84,8 @@ function SignalsContent() {
 
   // Contract hooks
   const lockFunds = useLockFunds()
-  const { addPurchasedSignal } = useUserSignalsContext()
+  const { addPurchasedSignal, purchasedSignals, updateSignalStatusByTaskId } = useUserSignalsContext()
+  const [viewer, setViewer] = useState<{ open: boolean, taskId?: number, cid?: string, content?: any }>(() => ({ open: false }))
 
   // Get signals data using new hooks
   const { signals: allSignals, isLoading: signalsLoading } = useSignals()
@@ -99,6 +101,59 @@ function SignalsContent() {
       toast.success(`Successfully locked funds! Transaction: ${lockFunds.hash.slice(0, 10)}...`)
     }
   }, [lockFunds.isSuccess, lockFunds.hash])
+
+  // Advance purchased signal status when FundsLocked/Revealed/Validated/Settled occur
+  useWatchEscrowManagerEvents((ev) => {
+    const tid = Number(ev.taskId)
+    updateSignalStatusByTaskId(tid, 'revealed') // Move to next actionable step for buyer
+    toast.success(`Buyer funds locked for task #${tid}`)
+  })
+  useWatchCommitRegistryEvents(
+    undefined,
+    (ev) => {
+      const tid = Number(ev.taskId)
+      updateSignalStatusByTaskId(tid, 'revealed')
+    },
+    (ev) => {
+      const tid = Number(ev.taskId)
+      updateSignalStatusByTaskId(tid, 'verified')
+    },
+    (ev) => {
+      const tid = Number(ev.taskId)
+      updateSignalStatusByTaskId(tid, 'settled')
+    }
+  )
+
+  const openViewerForTask = async (taskId: number) => {
+    try {
+      const { task } = useGetTask(taskId) // Note: for simplicity, we’ll read on demand via batch hook soon
+    } catch {}
+    // Fallback: use multicall list from useSignals
+    const taskFromSignals = allSignals.find(s => s.taskId === taskId)
+    // We need CID; fetch directly via read if not in signals
+    try {
+      // Quick read via fetchFromIPFS using CID from on-chain when available
+      // For now, ask user for key/nonce; we can add secure sharing later
+      const cid = (taskFromSignals as any)?.cid || undefined
+      if (!cid) {
+        toast.error('CID not available yet. Try after provider reveals.')
+        return
+      }
+      setViewer({ open: true, taskId, cid })
+    } catch (e) {
+      toast.error('Unable to open viewer')
+    }
+  }
+
+  const handleDecrypt = async (cid: string, key: string, nonce: string) => {
+    try {
+      const res = await decryptData(cid, key, nonce)
+      if (!res.success) throw new Error(res.message || 'Decrypt failed')
+      setViewer(v => ({ ...v, content: res.data }))
+    } catch (e:any) {
+      toast.error(e.message || 'Failed to decrypt')
+    }
+  }
 
   // Get signals based on active tab
   const signals = useMemo(() => {
