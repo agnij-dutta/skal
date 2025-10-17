@@ -556,38 +556,38 @@ function LiquidityContent() {
                     </div>
                   ) : (
                     <>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-white">
-                          <span className="text-sm text-white/70">Total Liquidity</span>
-                          <span className="font-semibold">{market.totalLiquidity}</span>
-                        </div>
-                        <div className="flex justify-between text-white">
-                          <span className="text-sm text-white/70">24h Volume</span>
-                          <span className="font-semibold">{market.volume24h}</span>
-                        </div>
-                        <div className="flex justify-between text-white">
-                          <span className="text-sm text-white/70">24h Fees</span>
-                          <span className="font-semibold">{market.fees24h}</span>
-                        </div>
-                        <div className="flex justify-between text-white">
-                          <span className="text-sm text-white/70">APY</span>
-                          <span className="font-semibold text-green-400">{market.apy.toFixed(1)}%</span>
-                        </div>
-                      </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-white">
+                      <span className="text-sm text-white/70">Total Liquidity</span>
+                      <span className="font-semibold">{market.totalLiquidity}</span>
+                    </div>
+                    <div className="flex justify-between text-white">
+                      <span className="text-sm text-white/70">24h Volume</span>
+                      <span className="font-semibold">{market.volume24h}</span>
+                    </div>
+                    <div className="flex justify-between text-white">
+                      <span className="text-sm text-white/70">24h Fees</span>
+                      <span className="font-semibold">{market.fees24h}</span>
+                    </div>
+                    <div className="flex justify-between text-white">
+                      <span className="text-sm text-white/70">APY</span>
+                      <span className="font-semibold text-green-400">{market.apy.toFixed(1)}%</span>
+                    </div>
+                  </div>
 
-                      <div className="h-24">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={market.liquidityHistory.slice(-7)}>
-                            <Area 
-                              type="monotone" 
-                              dataKey="liquidity" 
-                              stroke="#3b82f6" 
-                              fill="#3b82f6" 
-                              fillOpacity={0.3}
-                            />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </div>
+                  <div className="h-24">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={market.liquidityHistory.slice(-7)}>
+                        <Area 
+                          type="monotone" 
+                          dataKey="liquidity" 
+                          stroke="#3b82f6" 
+                          fill="#3b82f6" 
+                          fillOpacity={0.3}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
 
                       <Button 
                         className="w-full"
@@ -596,9 +596,9 @@ function LiquidityContent() {
                           setAddLiquidity(prev => ({ ...prev, marketId: market.id.toString() }))
                         }}
                       >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Liquidity
-                      </Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Liquidity
+                  </Button>
                     </>
                   )}
                 </CardContent>
