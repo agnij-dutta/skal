@@ -5,6 +5,11 @@ import { ProviderService } from './ProviderService.js'
 import { BuyerService } from './BuyerService.js'
 import { VerifierService } from './VerifierService.js'
 import { LPService } from './LPService.js'
+import { AIDecisionEngine } from '../ai/AIDecisionEngine.js'
+import { MarketIntelligence } from '../ai/MarketIntelligence.js'
+import { RiskManager } from '../ai/RiskManager.js'
+import { StrategyExecutor } from '../ai/StrategyExecutor.js'
+import { PerformanceMonitor } from '../ai/PerformanceMonitor.js'
 
 dotenv.config()
 
@@ -38,6 +43,13 @@ export class AgentOrchestrator extends EventEmitter {
   private services: Map<string, any> = new Map()
   private isRunning = false
   private config: AgentConfig
+  
+  // AI Infrastructure
+  private aiEngine!: AIDecisionEngine
+  private marketIntelligence!: MarketIntelligence
+  private riskManager!: RiskManager
+  private strategyExecutor!: StrategyExecutor
+  private performanceMonitor!: PerformanceMonitor
 
   constructor(config: AgentConfig) {
     super()
@@ -55,11 +67,17 @@ export class AgentOrchestrator extends EventEmitter {
     this.isRunning = true
 
     try {
+      // Initialize AI infrastructure first
+      await this.initializeAIInfrastructure()
+      
       // Initialize all services
       await this.initializeServices()
       
       // Start all services
       await this.startServices()
+      
+      // Start performance monitoring
+      this.startPerformanceMonitoring()
       
       // Setup graceful shutdown
       this.setupGracefulShutdown()
@@ -102,6 +120,42 @@ export class AgentOrchestrator extends EventEmitter {
     }
   }
 
+  private async initializeAIInfrastructure(): Promise<void> {
+    console.log('🧠 Initializing AI Infrastructure...')
+    
+    const geminiApiKey = process.env.GEMINI_API_KEY
+    if (!geminiApiKey) {
+      throw new Error('GEMINI_API_KEY environment variable is required')
+    }
+    
+    this.aiEngine = new AIDecisionEngine({
+      geminiApiKey,
+      provider: this.provider,
+      config: this.config
+    })
+    
+    this.marketIntelligence = new MarketIntelligence({
+      provider: this.provider,
+      contracts: this.config.contractAddresses
+    })
+    
+    this.riskManager = new RiskManager({
+      aiEngine: this.aiEngine,
+      marketIntelligence: this.marketIntelligence
+    })
+    
+    this.strategyExecutor = new StrategyExecutor({
+      provider: this.provider,
+      riskManager: this.riskManager
+    })
+    
+    this.performanceMonitor = new PerformanceMonitor({
+      aiEngine: this.aiEngine
+    })
+    
+    console.log('✅ AI Infrastructure initialized')
+  }
+
   private async initializeServices(): Promise<void> {
     console.log('🔧 Initializing agent services...')
 
@@ -111,6 +165,13 @@ export class AgentOrchestrator extends EventEmitter {
       config: this.config,
       orchestrator: this
     })
+    providerService.setAIInfrastructure({
+      engine: this.aiEngine,
+      intelligence: this.marketIntelligence,
+      risk: this.riskManager,
+      strategy: this.strategyExecutor,
+      performance: this.performanceMonitor
+    })
     this.services.set('provider', providerService)
 
     // Initialize Buyer Service
@@ -118,6 +179,13 @@ export class AgentOrchestrator extends EventEmitter {
       provider: this.provider,
       config: this.config,
       orchestrator: this
+    })
+    buyerService.setAIInfrastructure({
+      engine: this.aiEngine,
+      intelligence: this.marketIntelligence,
+      risk: this.riskManager,
+      strategy: this.strategyExecutor,
+      performance: this.performanceMonitor
     })
     this.services.set('buyer', buyerService)
 
@@ -127,6 +195,13 @@ export class AgentOrchestrator extends EventEmitter {
       config: this.config,
       orchestrator: this
     })
+    verifierService.setAIInfrastructure({
+      engine: this.aiEngine,
+      intelligence: this.marketIntelligence,
+      risk: this.riskManager,
+      strategy: this.strategyExecutor,
+      performance: this.performanceMonitor
+    })
     this.services.set('verifier', verifierService)
 
     // Initialize LP Service
@@ -134,6 +209,13 @@ export class AgentOrchestrator extends EventEmitter {
       provider: this.provider,
       config: this.config,
       orchestrator: this
+    })
+    lpService.setAIInfrastructure({
+      engine: this.aiEngine,
+      intelligence: this.marketIntelligence,
+      risk: this.riskManager,
+      strategy: this.strategyExecutor,
+      performance: this.performanceMonitor
     })
     this.services.set('lp', lpService)
 
@@ -153,9 +235,20 @@ export class AgentOrchestrator extends EventEmitter {
     console.log('✅ All services started')
   }
 
+  private startPerformanceMonitoring(): void {
+    if (process.env.ENABLE_PERFORMANCE_TRACKING === 'true') {
+      this.performanceMonitor.start()
+      console.log('📊 Performance monitoring started')
+    }
+  }
+
   private setupGracefulShutdown(): void {
     const shutdown = async (signal: string) => {
       console.log(`\n📡 Received ${signal}. Starting graceful shutdown...`)
+      
+      // Stop performance monitoring
+      this.performanceMonitor.stop()
+      
       await this.stop()
       process.exit(0)
     }

@@ -2,6 +2,7 @@ import { ethers } from 'ethers'
 import { BaseService, ServiceConfig } from './BaseService.js'
 import { ESCROW_MANAGER_ABI } from '../../../../lib/contracts/abis/escrowManager.js'
 import { COMMIT_REGISTRY_ABI } from '../../../../lib/contracts/abis/commitRegistry.js'
+import { TaskData, TaskFeatures, Decision, Outcome } from '../ai/types.js'
 
 export class BuyerService extends BaseService {
   private escrowManager: ethers.Contract
@@ -108,15 +109,35 @@ export class BuyerService extends BaseService {
     }
 
     try {
-      // Simple evaluation logic - buy if stake is reasonable
-      const stakeInEth = Number(ethers.formatEther(stake))
-      const buyAmount = this.config.marketConfig.buyAmount
+      // 1. Gather comprehensive task data
+      const taskData = await this.gatherTaskData(taskId, provider, stake)
       
-      if (stakeInEth <= 0.1) { // Only buy if stake is reasonable
-        this.logActivity(`Evaluating task ${taskId}: stake ${stakeInEth} ETH - BUYING`)
-        await this.buyTask(taskId, buyAmount)
+      // 2. Fast local screening (pre-filter)
+      const quickScore = this.localModels.predictTaskQuality(taskData.features)
+      if (quickScore < 0.3) {
+        this.logActivity(`Task ${taskId} rejected by quick screening (score: ${quickScore})`)
+        return
+      }
+      
+      // 3. AI-powered deep analysis
+      const decision = await this.aiEngine.analyzeTask(taskData)
+      
+      // 4. Risk assessment
+      const risk = await this.riskManager.assessTaskRisk(taskData)
+      
+      // 5. Determine optimal buy amount
+      const balance = await this.provider.getBalance(this.wallet.address)
+      const buyAmount = await this.riskManager.determineOptimalStakeSize(taskData, balance)
+      
+      // 6. Execute decision
+      if (decision.shouldBuy && risk.score < 0.7) {
+        this.logActivity(`AI Decision: BUY task ${taskId} | Confidence: ${decision.confidence} | Risk: ${risk.score} | Amount: ${ethers.formatEther(buyAmount)}`)
+        await this.buyTask(taskId, ethers.formatEther(buyAmount))
+        
+        // Track decision for learning
+        await this.trackDecision('task_purchase', taskData, decision)
       } else {
-        this.logActivity(`Evaluating task ${taskId}: stake ${stakeInEth} ETH - SKIPPING (too high)`)
+        this.logActivity(`AI Decision: SKIP task ${taskId} | Reason: ${decision.reason} | Risk: ${risk.score}`)
       }
       
     } catch (error) {
@@ -157,5 +178,105 @@ export class BuyerService extends BaseService {
     } catch (error) {
       this.logError(error as Error, `Failed to buy task ${taskId}`)
     }
+  }
+
+  // AI-driven helper methods
+
+  private async gatherTaskData(taskId: number, provider: string, stake: bigint): Promise<TaskData> {
+    // Get task details from contract
+    const task = await this.commitRegistry.getTask(taskId)
+    
+    // Get provider reputation
+    const reputation = await this.getProviderReputation(provider)
+    
+    // Get market conditions
+    const marketData = await this.marketIntelligence.analyzeMarketConditions(task.marketId)
+    
+    // Get historical data
+    const providerHistory = await this.getProviderHistory(provider)
+    
+    return {
+      taskId,
+      provider,
+      stake,
+      marketId: task.marketId,
+      reputation,
+      marketData,
+      providerHistory,
+      timestamp: Date.now(),
+      features: this.extractFeatures(task, reputation, marketData)
+    }
+  }
+
+  private extractFeatures(task: any, reputation: number, marketData: any): TaskFeatures {
+    return {
+      stakeAmount: Number(ethers.formatEther(task.stake)),
+      providerReputation: reputation / 100,
+      marketVolatility: marketData.volatility || 0.2,
+      timeSinceCommit: Date.now() - Number(task.timestamp) * 1000,
+      marketLiquidity: marketData.liquidity || 0,
+      competitionLevel: 0.5, // Would need to calculate from market data
+      historicalSuccessRate: reputation / 100
+    }
+  }
+
+  private async getProviderReputation(provider: string): Promise<number> {
+    try {
+      // This would query the reputation manager contract
+      // For now, return a mock value
+      return Math.floor(Math.random() * 100)
+    } catch (error) {
+      this.logError(error as Error, 'Failed to get provider reputation')
+      return 50 // Default reputation
+    }
+  }
+
+  private async getProviderHistory(provider: string): Promise<any> {
+    try {
+      // This would query historical task data
+      // For now, return mock data
+      return {
+        totalTasks: Math.floor(Math.random() * 50),
+        successfulTasks: Math.floor(Math.random() * 40),
+        averageScore: Math.floor(Math.random() * 100),
+        disputes: Math.floor(Math.random() * 5),
+        lastActivity: Date.now() - Math.random() * 86400000 // Random time in last 24h
+      }
+    } catch (error) {
+      this.logError(error as Error, 'Failed to get provider history')
+      return {
+        totalTasks: 0,
+        successfulTasks: 0,
+        averageScore: 50,
+        disputes: 0,
+        lastActivity: Date.now()
+      }
+    }
+  }
+
+  private async trackDecision(type: string, input: any, output: any): Promise<void> {
+    const decision: Decision = {
+      id: `${type}_${Date.now()}`,
+      agentType: 'buyer',
+      timestamp: Date.now(),
+      input,
+      output,
+      confidence: output.confidence || 0.5,
+      executed: true
+    }
+
+    // Store decision for later outcome tracking
+    await this.performanceMonitor.trackDecisionOutcome(decision, {
+      decisionId: decision.id,
+      success: true, // Will be updated when we know the outcome
+      actualReturn: 0, // Will be updated when task completes
+      timestamp: Date.now()
+    })
+  }
+
+  private async monitorPurchasedTask(taskId: number): Promise<void> {
+    // Track task through lifecycle for learning
+    // This would monitor the task until completion and update AI models
+    this.logActivity(`Monitoring purchased task ${taskId} for learning`)
   }
 }
