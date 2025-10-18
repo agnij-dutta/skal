@@ -1,16 +1,16 @@
 {
   "network": {
-    "name": "somniaTestnet",
-    "chainId": "50312"
+    "name": "flowEVMTestnet",
+    "chainId": "545"
   },
-  "timestamp": "2025-10-13T17:16:08.229Z",
+  "timestamp": "2025-10-18T06:25:09.835Z",
   "deployer": "0xe87758C6CCcf3806C9f1f0C8F99f6Dcae36E5449",
   "contracts": {
-    "CommitRegistry": "0x8D7cd1c2bEcA4eb4cE7aa0fA37eCB61ea125171f",
-    "EscrowManager": "0x5952b85E23388130A0D2C34B1151A4d60414d998",
-    "AMMEngine": "0x463f717e81182B3949b7d0382d30471984921f2f",
-    "ReputationManager": "0xd1077A0D78b8F6969f16c7409CdaB566B6d62486",
-    "AgentRegistry": "0x4cc020E6eC340401cdb4f89fC09E5ad3920E5E46"
+    "CommitRegistry": "0xA68b3808DCf0Fd8630640018fCB96a28f497F504",
+    "EscrowManager": "0x310BE1F533FFE873743A00aCBB69c22C980c2ECc",
+    "AMMEngine": "0xdC13a4eD2717a7b1E0dE2E55beF927c291A4fA0e",
+    "ReputationManager": "0xAF16AdAE0A157C92e2B173F2579e1f063A7aABE7",
+    "AgentRegistry": "0x02A56612A4D8D7ae38BD577Be3222D26a4846032"
   },
   "markets": {
     "1": "ETH Price Prediction",

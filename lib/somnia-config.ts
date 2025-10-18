@@ -29,6 +29,32 @@ export const somniaTestnet = {
   faucet: 'https://testnet.somnia.network/',
 } as const
 
+// Flow EVM Testnet Configuration
+export const flowEVMTestnet = {
+  id: 545,
+  name: 'Flow EVM Testnet',
+  nativeCurrency: {
+    decimals: 18,
+    name: 'Flow',
+    symbol: 'FLOW',
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://testnet.evm.nodes.onflow.org'],
+    },
+    public: {
+      http: ['https://testnet.evm.nodes.onflow.org'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'Flow EVM Explorer',
+      url: 'https://testnet.flowscan.io/',
+    },
+  },
+  testnet: true,
+} as const
+
 export const somniaMainnet = {
   id: 5031,
   name: 'Somnia Mainnet',
@@ -62,6 +88,15 @@ export const CONTRACT_ADDRESSES = {
   AMM_ENGINE: '0x463f717e81182B3949b7d0382d30471984921f2f',
   REPUTATION_MANAGER: '0xd1077A0D78b8F6969f16c7409CdaB566B6d62486',
   AGENT_REGISTRY: '0x4cc020E6eC340401cdb4f89fC09E5ad3920E5E46',
+} as const
+
+// Contract addresses on Flow EVM testnet
+export const FLOW_EVM_CONTRACT_ADDRESSES = {
+  COMMIT_REGISTRY: '0xA68b3808DCf0Fd8630640018fCB96a28f497F504',
+  ESCROW_MANAGER: '0x310BE1F533FFE873743A00aCBB69c22C980c2ECc',
+  AMM_ENGINE: '0xdC13a4eD2717a7b1E0dE2E55beF927c291A4fA0e',
+  REPUTATION_MANAGER: '0xAF16AdAE0A157C92e2B173F2579e1f063A7aABE7',
+  AGENT_REGISTRY: '0x02A56612A4D8D7ae38BD577Be3222D26a4846032',
 } as const
 
 // Market IDs

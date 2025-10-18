@@ -1,7 +1,7 @@
 import { createConfig, http } from 'wagmi'
 import { mainnet, sepolia } from 'wagmi/chains'
 import { injected, metaMask, walletConnect } from 'wagmi/connectors'
-import { CONTRACT_ADDRESSES, somniaTestnet } from './somnia-config'
+import { CONTRACT_ADDRESSES, FLOW_EVM_CONTRACT_ADDRESSES, somniaTestnet, flowEVMTestnet } from './somnia-config'
 import { COMMIT_REGISTRY_ABI } from './contracts/abis/commitRegistry'
 import { ESCROW_MANAGER_ABI } from './contracts/abis/escrowManager'
 import { AMM_ENGINE_ABI } from './contracts/abis/ammEngine'
@@ -9,7 +9,7 @@ import { REPUTATION_MANAGER_ABI } from './contracts/abis/reputationManager'
 import { AGENT_REGISTRY_ABI } from './contracts/abis/agentRegistry'
 
 export const config = createConfig({
-  chains: [somniaTestnet, mainnet, sepolia],
+  chains: [somniaTestnet, flowEVMTestnet, mainnet, sepolia],
   connectors: [
     injected(),
     metaMask(),
@@ -19,6 +19,7 @@ export const config = createConfig({
   ],
   transports: {
     [somniaTestnet.id]: http(),
+    [flowEVMTestnet.id]: http(),
     [mainnet.id]: http(),
     [sepolia.id]: http(),
   },

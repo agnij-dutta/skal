@@ -27,6 +27,11 @@ const config = {
       chainId: 0x1a1a1b, // 1703937 in decimal
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
+    flowEVMTestnet: {
+      url: "https://testnet.evm.nodes.onflow.org",
+      chainId: 545, // 0x221 in hex
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+    },
   },
   typechain: {
     outDir: "typechain-types",
