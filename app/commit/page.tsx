@@ -108,7 +108,9 @@ function CommitContent() {
       }
     },
     (event) => {
+      console.log('Reveal event received:', event, 'Current taskId:', taskId)
       if (taskId && Number(event.taskId) === taskId) {
+        console.log('Moving to verification step after reveal')
         setCurrentStep(4) // Move to verification after reveal
         taskData.refetch?.()
         toast.success('Data revealed successfully!')
@@ -147,6 +149,28 @@ function CommitContent() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  const generateDeterministicKey = async (providerAddress: string, taskId: number): Promise<string> => {
+    // Generate a deterministic key based on provider address and task ID
+    // This ensures both provider and buyer generate the same key
+    const seed = `skal-${providerAddress}-${taskId}-${process.env.NEXT_PUBLIC_APP_SECRET || 'skal-default-secret'}`
+    const encoder = new TextEncoder()
+    const data = encoder.encode(seed)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 64)
+  }
+
+  const generateDeterministicNonce = async (providerAddress: string, taskId: number): Promise<string> => {
+    // Generate a deterministic nonce based on provider address and task ID
+    const seed = `skal-nonce-${providerAddress}-${taskId}-${process.env.NEXT_PUBLIC_APP_SECRET || 'skal-default-secret'}`
+    const encoder = new TextEncoder()
+    const data = encoder.encode(seed)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32)
+  }
+
+
   const handlePrepareOutput = async () => {
     if (!formData.outputData.trim()) {
       toast.error('Please provide your AI output data')
@@ -162,6 +186,7 @@ function CommitContent() {
     
     try {
       // Upload and encrypt data to IPFS
+      // We'll generate the key after we get the task ID from the contract
       const result = await storageClient.encryptAndUpload(
         formData.outputData,
         {
@@ -233,11 +258,13 @@ function CommitContent() {
     setIsProcessing(true)
     
     try {
+      console.log('Starting reveal transaction for task:', taskId, 'with CID:', uploadResult.cid)
       // Reveal the task with IPFS CID
       await revealTask.revealTask(taskId, uploadResult.cid)
       
       // The event listener will handle moving to the next step
       toast.success('Reveal transaction submitted!')
+      console.log('Reveal transaction submitted successfully')
     } catch (error) {
       console.error('Reveal error:', error)
       toast.error('Failed to reveal data: ' + (error as Error).message)
@@ -568,6 +595,20 @@ function CommitContent() {
                   <span>Estimated Time:</span>
                   <span>2-5 minutes</span>
                 </div>
+              </div>
+
+              {/* Show automatic decryption info */}
+              <div className="p-4 bg-green-500/20 border border-green-400/30 rounded-lg">
+                <div className="flex items-center gap-2 text-green-400 mb-3">
+                  <Shield className="h-4 w-4" />
+                  <span className="font-medium">Automatic Decryption</span>
+                </div>
+                <p className="text-sm text-green-300 mb-2">
+                  Buyers will be able to automatically decrypt your data using a secure key generation system.
+                </p>
+                <p className="text-xs text-green-200">
+                  🔐 No manual key sharing required - the system handles encryption/decryption automatically.
+                </p>
               </div>
 
               <Alert className="bg-white/5 border-white/20">

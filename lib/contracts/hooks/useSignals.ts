@@ -26,6 +26,7 @@ interface SignalData {
   verificationScore?: number
   category: string
   isLoading?: boolean
+  cid?: string
 }
 
 // Market metadata - this would ideally come from a config or database
@@ -152,6 +153,7 @@ export function useSignals(marketId?: number) {
       let timestamp = 0
       let state = 0
       let validationScore = 0
+      let cid = undefined
 
       if (taskDetail?.result) {
         const task = taskDetail.result as any
@@ -160,6 +162,7 @@ export function useSignals(marketId?: number) {
         timestamp = Number(task.timestamp || 0)
         state = Number(task.state || 0)
         validationScore = Number(task.validationScore || 0)
+        cid = task.cid || undefined
       }
 
       // Calculate time ago from timestamp
@@ -203,6 +206,7 @@ export function useSignals(marketId?: number) {
         status: getStatusFromTaskState(state),
         category: metadata.category,
         isLoading: false,
+        cid,
       }
     })
   }, [allTaskIds, market1Tasks.isLoading, market2Tasks.isLoading, market3Tasks.isLoading, taskDetails.data, taskDetails.isLoading])

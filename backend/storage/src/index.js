@@ -66,6 +66,8 @@ const encryptUploadSchema = z.object({
   data: z.string().optional(),
   policyId: z.string().optional(),
   provider: z.string().optional(),
+  key: z.string().optional(),
+  nonce: z.string().optional(),
 })
 
 const ipfsRetrieveSchema = z.object({
@@ -74,9 +76,9 @@ const ipfsRetrieveSchema = z.object({
   nonce: z.string().optional(),
 })
 
-function encryptBuffer(plaintext) {
-  const key = randomBytes(32)
-  const iv = randomBytes(16)
+function encryptBuffer(plaintext, customKey = null, customNonce = null) {
+  const key = customKey ? Buffer.from(customKey, 'hex') : randomBytes(32)
+  const iv = customNonce ? Buffer.from(customNonce, 'hex') : randomBytes(16)
   const cipher = createCipheriv('aes-256-cbc', key, iv)
   let encrypted = cipher.update(plaintext)
   encrypted = Buffer.concat([encrypted, cipher.final()])
@@ -85,6 +87,13 @@ function encryptBuffer(plaintext) {
 
 function hex(buf) {
   return Buffer.from(buf).toString('hex')
+}
+
+function decryptBuffer(ciphertext, key, nonce) {
+  const decipher = createDecipheriv('aes-256-cbc', key, nonce)
+  let decrypted = decipher.update(ciphertext)
+  decrypted = Buffer.concat([decrypted, decipher.final()])
+  return decrypted
 }
 
 app.post('/encrypt-upload', upload.single('file'), async (req, res) => {
@@ -107,7 +116,10 @@ app.post('/encrypt-upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'File too large. Maximum size is 10MB.' })
     }
 
-    const { key, nonce, ciphertext } = encryptBuffer(buffer)
+    // Use custom key/nonce if provided, otherwise generate random ones
+    const customKey = req.body.key
+    const customNonce = req.body.nonce
+    const { key, nonce, ciphertext } = encryptBuffer(buffer, customKey, customNonce)
     
     // Upload to Pinata
     const { IpfsHash } = await pinata.pinJSONToIPFS({
@@ -205,19 +217,50 @@ app.post('/decrypt', async (req, res) => {
       return res.status(400).json({ error: 'Key and nonce required for decryption' })
     }
 
-    // TODO: Implement actual decryption
-    // 1. Fetch encrypted data from Pinata gateway
-    // 2. Decrypt using provided key and nonce
-    // 3. Return decrypted data
+    // Fetch encrypted data from Pinata gateway
+    const gatewayUrl = `https://gateway.pinata.cloud/ipfs/${cid}`
+    const response = await fetch(gatewayUrl)
+    
+    if (!response.ok) {
+      return res.status(404).json({ 
+        error: 'Data not found on IPFS',
+        message: 'The requested data could not be retrieved from IPFS'
+      })
+    }
+
+    const encryptedData = await response.json()
+    
+    if (!encryptedData.payload) {
+      return res.status(400).json({ 
+        error: 'Invalid data format',
+        message: 'The data on IPFS is not in the expected format'
+      })
+    }
+
+    // Decrypt the data
+    const ciphertext = Buffer.from(encryptedData.payload, 'base64')
+    const keyBuffer = Buffer.from(key, 'hex')
+    const nonceBuffer = Buffer.from(nonce, 'hex')
+    
+    const decryptedBuffer = decryptBuffer(ciphertext, keyBuffer, nonceBuffer)
+    const decryptedData = decryptedBuffer.toString('utf8')
 
     return res.json({
       success: true,
-      message: 'Decryption endpoint ready - implementation pending',
       cid,
-      decrypted: false
+      data: decryptedData,
+      size: decryptedBuffer.length
     })
   } catch (err) {
     console.error('Decrypt error:', err)
+    
+    if (err.message?.includes('Invalid key') || err.message?.includes('bad decrypt')) {
+      return res.status(400).json({ 
+        error: 'Decryption failed',
+        message: 'Invalid key or nonce provided'
+      })
+    }
+    
     return res.status(500).json({ 
       error: 'Decryption failed',
       message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'

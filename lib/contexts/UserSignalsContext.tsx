@@ -19,6 +19,9 @@ interface PurchasedSignal {
   category: string
   transactionHash?: string
   purchaseTime: string
+  encryptionKey?: string
+  nonce?: string
+  cid?: string
 }
 
 interface UserSignalsContextType {

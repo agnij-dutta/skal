@@ -21,7 +21,8 @@ import {
   TrendingUp,
   Users,
   Filter,
-  Loader2
+  Loader2,
+  Lock
 } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
@@ -126,24 +127,84 @@ function SignalsContent() {
 
   const openViewerForTask = async (taskId: number) => {
     try {
-      const { task } = useGetTask(taskId) // Note: for simplicity, we’ll read on demand via batch hook soon
-    } catch {}
-    // Fallback: use multicall list from useSignals
-    const taskFromSignals = allSignals.find(s => s.taskId === taskId)
-    // We need CID; fetch directly via read if not in signals
-    try {
-      // Quick read via fetchFromIPFS using CID from on-chain when available
-      // For now, ask user for key/nonce; we can add secure sharing later
-      const cid = (taskFromSignals as any)?.cid || undefined
-      if (!cid) {
-        toast.error('CID not available yet. Try after provider reveals.')
+      // Try to get task data from the contract
+      const { task } = useGetTask(taskId)
+      
+      if (task && task.cid) {
+        // Try to automatically decrypt using a shared key mechanism
+        await attemptAutomaticDecryption(taskId, task.cid)
         return
       }
+    } catch (error) {
+      console.log('Could not fetch task data directly:', error)
+    }
+    
+    // Fallback: use multicall list from useSignals
+    const taskFromSignals = allSignals.find(s => s.taskId === taskId)
+    
+    if (taskFromSignals && taskFromSignals.cid) {
+      // Try to automatically decrypt using a shared key mechanism
+      await attemptAutomaticDecryption(taskId, taskFromSignals.cid)
+      return
+    }
+    
+    // If no CID available, show error
+    toast.error('Data not yet revealed by provider. Please wait for the provider to reveal their data.')
+  }
+
+  const attemptAutomaticDecryption = async (taskId: number, cid: string) => {
+    try {
+      // Get the full provider address from the contract
+      const { task } = useGetTask(taskId)
+      if (!task || !task.provider) {
+        throw new Error('Task or provider not found')
+      }
+
+      // Generate deterministic key and nonce based on provider address and task ID
+      // This ensures both provider and buyer generate the same keys
+      const key = await generateDeterministicKey(task.provider, taskId)
+      const nonce = await generateDeterministicNonce(task.provider, taskId)
+      
+      console.log('Attempting automatic decryption for task:', taskId, 'with provider:', task.provider)
+      const res = await decryptData(cid, key, nonce)
+      
+      if (res.success) {
+        setViewer({ open: true, taskId, cid, content: res.data })
+        toast.success('Data automatically decrypted!')
+      } else {
+        // If automatic decryption fails, show manual decryption interface
+        setViewer({ open: true, taskId, cid })
+        toast.info('Automatic decryption failed. Please enter the decryption details manually.')
+      }
+    } catch (error) {
+      console.error('Automatic decryption failed:', error)
+      // Show manual decryption interface
       setViewer({ open: true, taskId, cid })
-    } catch (e) {
-      toast.error('Unable to open viewer')
+      toast.info('Automatic decryption failed. Please enter the decryption details manually.')
     }
   }
+
+  const generateDeterministicKey = async (providerAddress: string, taskId: number): Promise<string> => {
+    // Generate a deterministic key based on provider address and task ID
+    // This ensures both provider and buyer generate the same key
+    const seed = `skal-${providerAddress}-${taskId}-${process.env.NEXT_PUBLIC_APP_SECRET || 'skal-default-secret'}`
+    const encoder = new TextEncoder()
+    const data = encoder.encode(seed)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 64)
+  }
+
+  const generateDeterministicNonce = async (providerAddress: string, taskId: number): Promise<string> => {
+    // Generate a deterministic nonce based on provider address and task ID
+    const seed = `skal-nonce-${providerAddress}-${taskId}-${process.env.NEXT_PUBLIC_APP_SECRET || 'skal-default-secret'}`
+    const encoder = new TextEncoder()
+    const data = encoder.encode(seed)
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32)
+  }
+
 
   const handleDecrypt = async (cid: string, key: string, nonce: string) => {
     try {
@@ -527,9 +588,7 @@ function SignalsContent() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <h3 className="font-semibold text-white">{signal.marketName}</h3>
-                            <Badge variant="outline" className="bg-green-500/20 text-green-400 border-green-400/30">
-                              Purchased
-                            </Badge>
+                            {getStatusBadge(signal.status)}
                           </div>
                           <p className="text-white/70 text-sm mb-2">{signal.description}</p>
                           <div className="flex items-center gap-4 text-sm text-white/60">
@@ -543,6 +602,33 @@ function SignalsContent() {
                           <div className="text-lg font-semibold text-white">{signal.price}</div>
                           <div className="text-sm text-white/60">per signal</div>
                         </div>
+                      </div>
+
+                      <div className="flex gap-2 mt-4">
+                        {signal.status === 'revealed' || signal.status === 'verified' || signal.status === 'settled' ? (
+                          <Button 
+                            onClick={() => openViewerForTask(signal.taskId)}
+                            className="flex-1 bg-white/20 hover:bg-white/30 text-white border-white/30 font-medium"
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Data
+                          </Button>
+                        ) : signal.status === 'locked' ? (
+                          <Button 
+                            disabled
+                            className="flex-1 bg-white/10 text-white/50 border-white/20"
+                          >
+                            <Clock className="h-4 w-4 mr-2" />
+                            Waiting for Reveal
+                          </Button>
+                        ) : null}
+                        
+                        <Button variant="outline" className="bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
+                          <Link href={`/markets/${signal.marketId}`}>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Market
+                          </Link>
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
@@ -633,6 +719,142 @@ function SignalsContent() {
                     </>
                   )}
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Data Viewer Modal */}
+      {viewer.open && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-2xl">
+            <CardHeader className="border-b border-white/10">
+              <CardTitle className="text-white">View Revealed Data</CardTitle>
+              <CardDescription className="text-white/70">
+                Task #{viewer.taskId} - Decrypt and view the revealed AI output
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 p-6">
+              {viewer.content ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-green-500/20 border border-green-400/30 rounded-lg">
+                    <div className="flex items-center gap-2 text-green-400 mb-2">
+                      <CheckCircle className="h-4 w-4" />
+                      <span className="font-medium">Data Successfully Decrypted</span>
+                    </div>
+                    <p className="text-sm text-green-300">
+                      The AI output has been decrypted and is ready to view.
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-white">Decrypted AI Output:</Label>
+                    <div className="p-4 bg-white/5 border border-white/20 rounded-lg max-h-96 overflow-y-auto">
+                      <pre className="text-sm text-white/90 whitespace-pre-wrap break-words">
+                        {typeof viewer.content === 'string' 
+                          ? viewer.content 
+                          : JSON.stringify(viewer.content, null, 2)
+                        }
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-4 bg-orange-500/20 border border-orange-400/30 rounded-lg">
+                    <div className="flex items-center gap-2 text-orange-400 mb-2">
+                      <Lock className="h-4 w-4" />
+                      <span className="font-medium">Decryption Failed</span>
+                    </div>
+                    <p className="text-sm text-orange-300 mb-2">
+                      Automatic decryption failed. This might be due to a key mismatch or data corruption.
+                    </p>
+                    <p className="text-xs text-orange-200">
+                      💡 You can try manual decryption by entering the key and nonce provided by the data provider.
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="decryptKey" className="text-white">Decryption Key</Label>
+                      <Input
+                        id="decryptKey"
+                        type="text"
+                        placeholder="Enter the decryption key"
+                        className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const key = (e.target as HTMLInputElement).value
+                            const nonce = (document.getElementById('decryptNonce') as HTMLInputElement)?.value
+                            if (key && nonce) {
+                              handleDecrypt(viewer.cid!, key, nonce)
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="decryptNonce" className="text-white">Nonce</Label>
+                      <Input
+                        id="decryptNonce"
+                        type="text"
+                        placeholder="Enter the nonce"
+                        className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const key = (document.getElementById('decryptKey') as HTMLInputElement)?.value
+                            const nonce = (e.target as HTMLInputElement).value
+                            if (key && nonce) {
+                              handleDecrypt(viewer.cid!, key, nonce)
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+                    
+                    <Button 
+                      onClick={() => {
+                        const key = (document.getElementById('decryptKey') as HTMLInputElement)?.value
+                        const nonce = (document.getElementById('decryptNonce') as HTMLInputElement)?.value
+                        if (key && nonce && viewer.cid) {
+                          handleDecrypt(viewer.cid, key, nonce)
+                        } else {
+                          toast.error('Please enter both key and nonce')
+                        }
+                      }}
+                      className="w-full bg-white/20 hover:bg-white/30 text-white border-white/30 font-medium"
+                    >
+                      <Shield className="h-4 w-4 mr-2" />
+                      Decrypt Data
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-4">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/30"
+                  onClick={() => setViewer({ open: false })}
+                >
+                  Close
+                </Button>
+                {viewer.content && (
+                  <Button 
+                    className="flex-1 bg-white/20 hover:bg-white/30 text-white border-white/30 font-medium"
+                    onClick={() => {
+                      const data = typeof viewer.content === 'string' 
+                        ? viewer.content 
+                        : JSON.stringify(viewer.content, null, 2)
+                      navigator.clipboard.writeText(data)
+                      toast.success('Data copied to clipboard!')
+                    }}
+                  >
+                    Copy Data
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
