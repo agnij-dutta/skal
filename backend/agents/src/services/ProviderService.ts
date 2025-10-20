@@ -91,12 +91,26 @@ export class ProviderService extends BaseService {
       // 3. Generate high-quality data
       const intelligentData = await this.generateIntelligentData(taskParams)
       
-      // 4. Determine optimal stake
-      const optimalStake = await this.riskManager.calculateOptimalProviderStake({
-        dataQuality: intelligentData.qualityScore,
-        marketDemand: marketDemand.score,
-        competition: taskParams.competitionLevel
-      })
+  // 4. Determine optimal stake
+  const optimalStake = await this.riskManager.determineOptimalStakeSize({
+    taskId: 0, // Will be set when committed
+    provider: this.wallet!.address,
+    stake: ethers.parseEther('0.01'), // Base stake
+    marketId: taskParams.marketId,
+    reputation: await this.getOwnReputation(),
+    marketData: marketDemand,
+    providerHistory: await this.getHistoricalPerformance(),
+    timestamp: Date.now(),
+    features: {
+      stakeAmount: 0.01,
+      providerReputation: await this.getOwnReputation() / 100,
+      marketVolatility: marketDemand.volatility || 0.2,
+      timeSinceCommit: 0,
+      marketLiquidity: marketDemand.liquidity || 10000,
+      competitionLevel: taskParams.competitionLevel,
+      historicalSuccessRate: await this.getHistoricalPerformance().then(p => p.averageScore / 100)
+    }
+  }, await this.provider.getBalance(this.wallet!.address))
       
       // 5. Upload and commit
       const cid = await this.uploadToStorage(intelligentData.data)
@@ -106,6 +120,8 @@ export class ProviderService extends BaseService {
       
     } catch (error) {
       this.logError(error as Error, 'Failed to create task')
+      // Continue operation - will retry on next interval
+      console.log('[ProviderService] Will retry task creation on next cycle')
     }
   }
 

@@ -38,8 +38,13 @@ export class BuyerService extends BaseService {
       // Listen for new tasks
       this.setupEventListeners()
       
-      // Skip historical check for testing
-      this.logActivity('Skipping historical task check for testing')
+      // Check for existing tasks that haven't been bought yet
+      await this.checkExistingTasks()
+      
+      // Periodic check for all available tasks
+      setInterval(async () => {
+        await this.checkAllAvailableTasks()
+      }, 60000) // Check every minute
       
     } catch (error) {
       this.logError(error as Error, 'Failed to start buyer service')
@@ -102,6 +107,48 @@ export class BuyerService extends BaseService {
     }
   }
 
+  private async checkAllAvailableTasks(): Promise<void> {
+    try {
+      this.logActivity('🔍 Scanning all available tasks...')
+      
+      // Get all task commits from recent history
+      const filter = this.commitRegistry.filters.TaskCommitted()
+      const events = await this.commitRegistry.queryFilter(filter, -500) // Last 500 blocks
+      
+      for (const event of events) {
+        if ('args' in event && event.args) {
+          const taskId = Number(event.args.taskId)
+          
+          // Skip if already watched/evaluated
+          if (this.watchedTasks.has(taskId)) {
+            continue
+          }
+          
+          // Check if task is still uncommitted (not revealed yet)
+          try {
+            const task = await this.commitRegistry.getTask(taskId)
+            
+            // If task has no revealed data (CID is empty), it's still available
+            if (!task.revealed || task.cid === '') {
+              const provider = event.args.provider
+              const stake = event.args.stake
+              
+              this.watchedTasks.add(taskId)
+              this.logActivity(`Found available task ${taskId}, evaluating...`)
+              await this.evaluateTask(taskId, provider, stake)
+            }
+          } catch (error) {
+            // Task might not exist or error occurred, skip
+            continue
+          }
+        }
+      }
+      
+    } catch (error) {
+      this.logError(error as Error, 'Failed to check all available tasks')
+    }
+  }
+
   private async evaluateTask(taskId: number, provider: string, stake: bigint): Promise<void> {
     if (!this.wallet) {
       this.logError(new Error('Wallet not initialized'), 'Cannot evaluate task')
@@ -112,9 +159,11 @@ export class BuyerService extends BaseService {
       // 1. Gather comprehensive task data
       const taskData = await this.gatherTaskData(taskId, provider, stake)
       
-      // 2. Fast local screening (pre-filter)
-      const quickScore = this.localModels.predictTaskQuality(taskData.features)
-      if (quickScore < 0.3) {
+      // 2. Fast local screening (pre-filter) - more lenient threshold
+      const LocalMLModels = (await import('../ai/LocalMLModels.js')).LocalMLModels
+      const localModels = new LocalMLModels()
+      const quickScore = localModels.predictTaskQuality(taskData.features)
+      if (quickScore < 0.2) { // Lowered from 0.3 to 0.2
         this.logActivity(`Task ${taskId} rejected by quick screening (score: ${quickScore})`)
         return
       }
@@ -129,8 +178,11 @@ export class BuyerService extends BaseService {
       const balance = await this.provider.getBalance(this.wallet.address)
       const buyAmount = await this.riskManager.determineOptimalStakeSize(taskData, balance)
       
-      // 6. Execute decision
-      if (decision.shouldBuy && risk.score < 0.7) {
+      // 6. Execute decision - more aggressive buying strategy
+      // Buy if: AI recommends AND (risk is acceptable OR confidence is very high)
+      const shouldBuy = decision.shouldBuy && (risk.score < 0.8 || decision.confidence > 0.85)
+      
+      if (shouldBuy) {
         this.logActivity(`AI Decision: BUY task ${taskId} | Confidence: ${decision.confidence} | Risk: ${risk.score} | Amount: ${ethers.formatEther(buyAmount)}`)
         await this.buyTask(taskId, ethers.formatEther(buyAmount))
         

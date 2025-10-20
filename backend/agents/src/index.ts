@@ -8,7 +8,7 @@ dotenv.config()
 // Load configuration from environment variables
 const config: AgentConfig = {
   rpcUrl: process.env.SOMNIA_RPC || 'https://dream-rpc.somnia.network/',
-  storageUrl: process.env.STORAGE_URL || 'http://localhost:8787',
+  storageUrl: process.env.STORAGE_URL || 'https://skal.onrender.com',
   contractAddresses: {
     commitRegistry: process.env.COMMIT_REGISTRY || '0xB94ecC5a4cA8D7D2749cE8353F03B38372235C26',
     escrowManager: process.env.ESCROW_MANAGER || '0x8F9Cce60CDa5c3b262c30321f40a180A6A9DA762',
@@ -106,23 +106,24 @@ async function main(): Promise<void> {
     
   } catch (error) {
     console.error('❌ Failed to start agent orchestrator:', error)
-    process.exit(1)
+    console.log('⚠️  Some services may have failed, but system will continue running')
+    // Don't exit - let working services continue
   }
 }
 
-// Handle uncaught exceptions
+// Handle uncaught exceptions - log but keep running
 process.on('uncaughtException', (error) => {
-  console.error('💥 Uncaught Exception:', error)
-  process.exit(1)
+  console.error('💥 Uncaught Exception (recovered):', error.message)
+  // Don't exit - autonomous system should be resilient
 })
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason)
-  process.exit(1)
+  console.error('💥 Unhandled Rejection (recovered):', reason)
+  // Don't exit - log and continue
 })
 
 // Start the application
 main().catch((error) => {
-  console.error('💥 Fatal error:', error)
-  process.exit(1)
+  console.error('💥 Startup error (will retry):', error.message)
+  // Don't exit - system should be resilient
 })

@@ -27,17 +27,20 @@ export class LPService extends BaseService {
       await this.initializeWallet(this.config.agentKeys.lp)
       this.isRunning = true
       
-      this.logActivity('LP service started')
+      this.logActivity('LP service started - ready for autonomous operation')
       
-      // Start with initial liquidity provision
-      await this.provideInitialLiquidity()
+      // Skip initial liquidity - will be provided on demand from dapp or when needed
+      // await this.provideInitialLiquidity()
       
-      // Start rebalancing process
+      // Start rebalancing process (will check if liquidity exists before acting)
       this.startRebalancing()
+      
+      this.logActivity('AI-driven LP agent ready to provide liquidity and rebalance markets')
       
     } catch (error) {
       this.logError(error as Error, 'Failed to start LP service')
-      throw error
+      // Don't throw - let other agents continue
+      console.log('LP service will retry operations as needed')
     }
   }
 
@@ -126,7 +129,10 @@ export class LPService extends BaseService {
         markets: marketAnalyses,
         currentPositions: await this.getCurrentPositions(),
         availableCapital: await this.getAvailableCapital(),
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        globalSentiment: { score: 0.5, trend: 'neutral' }, // Add missing field
+        volatility: marketAnalyses[0]?.volatility || 0.2,
+        liquidity: marketAnalyses.reduce((sum, m) => sum + (m.liquidity || 0), 0)
       })
       
       // 3. Execute strategy
@@ -144,8 +150,19 @@ export class LPService extends BaseService {
         }
       }
       
-      // 4. Dynamic pricing updates
-      await this.updateDynamicPricing(strategy.pricingModels)
+      // 4. Dynamic pricing updates (create pricing models from market analyses)
+      const pricingModels = new Map<number, any>()
+      for (const analysis of marketAnalyses) {
+        pricingModels.set(analysis.marketId, {
+          marketId: analysis.marketId,
+          basePrice: 1.0,
+          volatilityMultiplier: analysis.volatility,
+          demandFactor: analysis.liquidity > 1000 ? 1.2 : 0.8,
+          reputationBonus: 0,
+          lastUpdate: Date.now()
+        })
+      }
+      await this.updateDynamicPricing(pricingModels)
       
       // 5. Detect arbitrage opportunities
       await this.detectAndExecuteArbitrage()
