@@ -186,7 +186,24 @@ app.post('/encrypt-upload', upload.single('file'), async (req, res) => {
     // Use custom key/nonce if provided, otherwise generate random ones
     const customKey = req.body.key
     const customNonce = req.body.nonce
+    
+    console.log('Encryption request:', {
+      hasCustomKey: !!customKey,
+      hasCustomNonce: !!customNonce,
+      keyLength: customKey?.length,
+      nonceLength: customNonce?.length,
+      keyPreview: customKey?.slice(0, 16),
+      noncePreview: customNonce?.slice(0, 16)
+    })
+    
     const { key, nonce, ciphertext, authTag } = encryptBuffer(buffer, customKey, customNonce)
+    
+    console.log('Encryption result:', {
+      keyLength: key.length,
+      nonceLength: nonce.length,
+      authTagLength: authTag.length,
+      ciphertextLength: ciphertext.length
+    })
     
     // Upload to Pinata with authTag included
     const { IpfsHash } = await pinata.pinJSONToIPFS({
