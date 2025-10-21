@@ -100,6 +100,35 @@ function decryptBuffer(ciphertext, key, nonce, authTag = null) {
   return decrypted
 }
 
+// Old decryption function for backward compatibility (tries multiple algorithms)
+function decryptBufferOld(ciphertext, key, nonce) {
+  // Try ChaCha20-Poly1305 without authTag first
+  try {
+    const decipher = createDecipheriv('chacha20-poly1305', key, nonce)
+    let decrypted = decipher.update(ciphertext)
+    decrypted = Buffer.concat([decrypted, decipher.final()])
+    return decrypted
+  } catch (error) {
+    console.log('ChaCha20-Poly1305 failed, trying AES-256-GCM:', error.message)
+    
+    // Try AES-256-GCM as fallback (old format)
+    try {
+      const decipher = createDecipheriv('aes-256-gcm', key, nonce)
+      let decrypted = decipher.update(ciphertext)
+      decrypted = Buffer.concat([decrypted, decipher.final()])
+      return decrypted
+    } catch (error2) {
+      console.log('AES-256-GCM failed, trying AES-256-CBC:', error2.message)
+      
+      // Try AES-256-CBC as last resort
+      const decipher = createDecipheriv('aes-256-cbc', key, nonce)
+      let decrypted = decipher.update(ciphertext)
+      decrypted = Buffer.concat([decrypted, decipher.final()])
+      return decrypted
+    }
+  }
+}
+
 app.post('/encrypt-upload', upload.single('file'), async (req, res) => {
   try {
     // Validate request body
@@ -249,7 +278,42 @@ app.post('/decrypt', async (req, res) => {
     const nonceBuffer = Buffer.from(nonce, 'hex')
     const authTag = encryptedData.authTag ? Buffer.from(encryptedData.authTag, 'base64') : null
     
-    const decryptedBuffer = decryptBuffer(ciphertext, keyBuffer, nonceBuffer, authTag)
+    let decryptedBuffer
+    try {
+      console.log('Attempting decryption with key length:', keyBuffer.length, 'nonce length:', nonceBuffer.length, 'authTag:', !!authTag)
+      console.log('Key (first 16 chars):', key.slice(0, 16), 'Nonce (first 16 chars):', nonce.slice(0, 16))
+      
+      // Validate key and nonce lengths
+      if (keyBuffer.length !== 32) {
+        throw new Error(`Invalid key length: ${keyBuffer.length}, expected 32`)
+      }
+      if (nonceBuffer.length !== 12) {
+        throw new Error(`Invalid nonce length: ${nonceBuffer.length}, expected 12`)
+      }
+      
+      // Try with authTag first (new format)
+      if (authTag) {
+        console.log('Trying new format with authTag...')
+        decryptedBuffer = decryptBuffer(ciphertext, keyBuffer, nonceBuffer, authTag)
+        console.log('New format decryption successful!')
+      } else {
+        console.log('No authTag found, trying old format...')
+        // Fallback to old format without authTag (backward compatibility)
+        decryptedBuffer = decryptBufferOld(ciphertext, keyBuffer, nonceBuffer)
+        console.log('Old format decryption successful!')
+      }
+    } catch (error) {
+      console.log('Decryption with authTag failed, trying old format:', error.message)
+      // If new format fails, try old format
+      try {
+        decryptedBuffer = decryptBufferOld(ciphertext, keyBuffer, nonceBuffer)
+        console.log('Fallback decryption successful!')
+      } catch (fallbackError) {
+        console.error('All decryption methods failed:', fallbackError.message)
+        throw new Error('Unable to decrypt data with any supported method')
+      }
+    }
+    
     const decryptedData = decryptedBuffer.toString('utf8')
 
     return res.json({
