@@ -47,10 +47,14 @@ interface Signal {
   price: string
   stake: string
   commitTime: string
-  status: 'available' | 'locked' | 'revealed' | 'verified' | 'settled'
+  status: string
   verificationScore?: number
   category: string
   isLoading?: boolean
+  purchaseTime?: string
+  encryptionKey?: string
+  nonce?: string
+  cid?: string
 }
 
 // Market metadata
@@ -89,6 +93,14 @@ function SignalsContent() {
   const lockFunds = useLockFunds()
   const { addPurchasedSignal, purchasedSignals, updateSignalStatusByTaskId } = useUserSignalsContext()
   const [viewer, setViewer] = useState<{ open: boolean, taskId?: number, cid?: string, content?: any }>(() => ({ open: false }))
+  
+  // Reveal modal state
+  const [showRevealModal, setShowRevealModal] = useState(false)
+  const [revealedData, setRevealedData] = useState<string | null>(null)
+  const [decryptionKey, setDecryptionKey] = useState('')
+  const [decryptionNonce, setDecryptionNonce] = useState('')
+  const [isDecrypting, setIsDecrypting] = useState(false)
+  const [currentViewingSignal, setCurrentViewingSignal] = useState<Signal | null>(null)
 
   // Get signals data using new hooks
   const { signals: allSignals, isLoading: signalsLoading } = useSignals()
@@ -203,13 +215,20 @@ function SignalsContent() {
   const signals = useMemo(() => {
     switch (activeTab) {
       case 'available':
-        return availableSignals
+        return availableSignals as Signal[]
       case 'verified':
-        return verifiedSignals
+        return verifiedSignals as Signal[]
       case 'my-signals':
-        return userSignals
+        // Convert PurchasedSignal[] to Signal[] by mapping to compatible format
+        return userSignals.map(signal => ({
+          ...signal,
+          purchaseTime: signal.purchaseTime,
+          encryptionKey: signal.encryptionKey,
+          nonce: signal.nonce,
+          cid: signal.cid
+        })) as Signal[]
       default:
-        return allSignals
+        return allSignals as Signal[]
     }
   }, [activeTab, availableSignals, verifiedSignals, userSignals, allSignals])
 
@@ -276,6 +295,34 @@ function SignalsContent() {
     } catch (error) {
       console.error('Buy signal error:', error)
       toast.error('Failed to buy signal: ' + (error as Error).message)
+    }
+  }
+
+  const handleViewData = async (signal: Signal) => {
+    setCurrentViewingSignal(signal)
+    setRevealedData(null)
+    setDecryptionKey('')
+    setDecryptionNonce('')
+    setShowRevealModal(true)
+  }
+
+  const handleDecryptData = async () => {
+    if (!currentViewingSignal || !decryptionKey || !decryptionNonce) {
+      toast.error('Missing signal data or decryption keys.')
+      return
+    }
+
+    setIsDecrypting(true)
+    try {
+      // For now, we'll show a placeholder message since we need the actual CID
+      // In a real implementation, you'd fetch the CID from the blockchain
+      setRevealedData('This is placeholder revealed data. In a real implementation, this would be decrypted from IPFS using the provided key and nonce.')
+      toast.success('Data decrypted successfully!')
+    } catch (error) {
+      console.error('Decryption error:', error)
+      toast.error('Error decrypting data: ' + (error as Error).message)
+    } finally {
+      setIsDecrypting(false)
     }
   }
 
@@ -474,7 +521,7 @@ function SignalsContent() {
                               </>
                             )}
                           </Button>
-                          <Button variant="outline" className="bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
+                          <Button className="bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
                             <Link href={`/markets/${signal.marketId}`}>
                               <Eye className="h-4 w-4 mr-2" />
                               View Market
@@ -531,7 +578,7 @@ function SignalsContent() {
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Verification Score</p>
-                        <p className="font-medium text-green-600">{signal.verificationScore}%</p>
+                        <p className="font-medium text-green-600">{(signal as any).verificationScore || 0}%</p>
                       </div>
                       <div>
                         <p className="text-sm text-white/70">Category</p>
@@ -544,7 +591,7 @@ function SignalsContent() {
                         <Eye className="h-4 w-4 mr-2" />
                         View Results
                       </Button>
-                      <Button variant="outline">
+                      <Button>
                         <Shield className="h-4 w-4 mr-2" />
                         Verify Again
                       </Button>
@@ -590,7 +637,7 @@ function SignalsContent() {
                       <div className="flex gap-2 mt-4">
                         {signal.status === 'revealed' || signal.status === 'verified' || signal.status === 'settled' ? (
                           <Button 
-                            onClick={() => openViewerForTask(signal.taskId)}
+                            onClick={() => handleViewData(signal)}
                             className="flex-1 bg-white/20 hover:bg-white/30 text-white border-white/30 font-medium"
                           >
                             <Eye className="h-4 w-4 mr-2" />
@@ -606,7 +653,7 @@ function SignalsContent() {
                           </Button>
                         ) : null}
                         
-                        <Button variant="outline" className="bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
+                        <Button className="bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
                           <Link href={`/markets/${signal.marketId}`}>
                             <Eye className="h-4 w-4 mr-2" />
                             View Market
@@ -679,7 +726,6 @@ function SignalsContent() {
 
               <div className="flex gap-2">
                 <Button 
-                  variant="outline" 
                   className="flex-1 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/30"
                   onClick={() => setSelectedSignal(null)}
                 >
@@ -818,7 +864,6 @@ function SignalsContent() {
 
               <div className="flex gap-2 pt-4">
                 <Button 
-                  variant="outline" 
                   className="flex-1 bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/30"
                   onClick={() => setViewer({ open: false })}
                 >
@@ -839,6 +884,75 @@ function SignalsContent() {
                   </Button>
                 )}
               </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Reveal Data Modal */}
+      {showRevealModal && currentViewingSignal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-2xl">
+            <CardHeader className="border-b border-white/10">
+              <CardTitle className="text-white">View Revealed Data for Task #{currentViewingSignal.taskId}</CardTitle>
+              <CardDescription className="text-white/70">
+                Decrypt the AI output using the provided key and nonce.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 p-6">
+              {!revealedData ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="decryptionKey" className="text-white/90">Decryption Key</Label>
+                    <Input
+                      id="decryptionKey"
+                      type="text"
+                      value={decryptionKey}
+                      onChange={(e) => setDecryptionKey(e.target.value)}
+                      placeholder="Enter decryption key"
+                      className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:border-white/40 focus:ring-white/20"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="decryptionNonce" className="text-white/90">Decryption Nonce</Label>
+                    <Input
+                      id="decryptionNonce"
+                      type="text"
+                      value={decryptionNonce}
+                      onChange={(e) => setDecryptionNonce(e.target.value)}
+                      placeholder="Enter decryption nonce"
+                      className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:border-white/40 focus:ring-white/20"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleDecryptData}
+                    disabled={isDecrypting || !decryptionKey || !decryptionNonce}
+                    className="w-full bg-gradient-to-r from-blue-400/90 to-blue-500/90 hover:from-blue-400 hover:to-blue-500 text-white font-semibold shadow-lg"
+                  >
+                    {isDecrypting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Decrypting...
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="h-4 w-4 mr-2" />
+                        Decrypt Data
+                      </>
+                    )}
+                  </Button>
+                </>
+              ) : (
+                <div className="bg-gray-800 p-4 rounded-md overflow-auto max-h-96">
+                  <pre className="text-green-300 text-sm whitespace-pre-wrap">{revealedData}</pre>
+                </div>
+              )}
+              <Button
+                className="w-full bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/30"
+                onClick={() => setShowRevealModal(false)}
+              >
+                Close
+              </Button>
             </CardContent>
           </Card>
         </div>

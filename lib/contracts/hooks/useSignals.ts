@@ -22,7 +22,7 @@ interface SignalData {
   price: string
   stake: string
   commitTime: string
-  status: 'available' | 'locked' | 'revealed' | 'verified' | 'settled'
+  status: string
   verificationScore?: number
   category: string
   isLoading?: boolean
@@ -46,7 +46,7 @@ const MARKET_METADATA = {
     description: 'High-quality text embeddings for semantic search and similarity',
     category: 'NLP',
   },
-} as const
+}
 
 // Hook to fetch individual task details
 function useTaskDetails(taskId: number | undefined) {
