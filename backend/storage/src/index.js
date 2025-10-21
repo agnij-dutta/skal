@@ -122,6 +122,22 @@ function decryptBufferOld(ciphertext, key, nonce) {
     )
   }
   
+  // For 24-byte nonce (extended), try different approaches
+  if (nonce.length === 24) {
+    // Try using first 12 bytes as nonce
+    const nonce12 = nonce.slice(0, 12)
+    attempts.push(
+      { name: 'ChaCha20-Poly1305 (12-byte)', algo: 'chacha20-poly1305', iv: nonce12 },
+      { name: 'AES-256-GCM (12-byte)', algo: 'aes-256-gcm', iv: nonce12 }
+    )
+    
+    // Try using first 16 bytes as IV
+    const iv16 = nonce.slice(0, 16)
+    attempts.push(
+      { name: 'AES-256-CBC (16-byte)', algo: 'aes-256-cbc', iv: iv16 }
+    )
+  }
+  
   // Always try AES-256-CBC with padded nonce as fallback
   if (nonce.length === 12) {
     const paddedIv = Buffer.concat([nonce, Buffer.alloc(4)])
@@ -291,6 +307,14 @@ app.post('/decrypt', async (req, res) => {
       dataKeys: Object.keys(encryptedData)
     })
     
+    // Check if payload is suspiciously small (might be a different format)
+    const payloadSize = Buffer.from(encryptedData.payload, 'base64').length
+    console.log('Decoded payload size:', payloadSize, 'bytes')
+    
+    if (payloadSize < 16) {
+      console.log('⚠️  Payload is very small, might be a different encryption format')
+    }
+    
     if (!encryptedData.payload) {
       return res.status(400).json({ 
         error: 'Invalid data format',
@@ -302,7 +326,25 @@ app.post('/decrypt', async (req, res) => {
     const ciphertext = Buffer.from(encryptedData.payload, 'base64')
     const keyBuffer = Buffer.from(key, 'hex')
     const nonceBuffer = Buffer.from(nonce, 'hex')
-    const authTag = encryptedData.authTag ? Buffer.from(encryptedData.authTag, 'base64') : null
+    
+    // Handle different authTag formats
+    let authTag = null
+    if (encryptedData.authTag) {
+      try {
+        // Try base64 first
+        authTag = Buffer.from(encryptedData.authTag, 'base64')
+        console.log('AuthTag from base64, length:', authTag.length)
+      } catch (error) {
+        try {
+          // Try hex if base64 fails
+          authTag = Buffer.from(encryptedData.authTag, 'hex')
+          console.log('AuthTag from hex, length:', authTag.length)
+        } catch (error2) {
+          console.log('Could not parse authTag:', error2.message)
+          authTag = null
+        }
+      }
+    }
     
     let decryptedBuffer
     try {
@@ -320,8 +362,27 @@ app.post('/decrypt', async (req, res) => {
       // Try with authTag first (new format)
       if (authTag) {
         console.log('Trying new format with authTag...')
-        decryptedBuffer = decryptBuffer(ciphertext, keyBuffer, nonceBuffer, authTag)
-        console.log('New format decryption successful!')
+        console.log('AuthTag length:', authTag.length, 'Expected: 16 for ChaCha20-Poly1305')
+        
+        // Try ChaCha20-Poly1305 with authTag
+        try {
+          decryptedBuffer = decryptBuffer(ciphertext, keyBuffer, nonceBuffer, authTag)
+          console.log('New format decryption successful!')
+        } catch (error) {
+          console.log('ChaCha20-Poly1305 with authTag failed:', error.message)
+          
+          // If authTag is 12 bytes, it might be a different format
+          if (authTag.length === 12) {
+            console.log('AuthTag is 12 bytes, trying different approach...')
+            // Try using the authTag as additional nonce data
+            const extendedNonce = Buffer.concat([nonceBuffer, authTag])
+            console.log('Trying with extended nonce (24 bytes)...')
+            decryptedBuffer = decryptBufferOld(ciphertext, keyBuffer, extendedNonce)
+            console.log('Extended nonce decryption successful!')
+          } else {
+            throw error
+          }
+        }
       } else {
         console.log('No authTag found, trying old format...')
         // Fallback to old format without authTag (backward compatibility)
