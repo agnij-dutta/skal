@@ -66,6 +66,8 @@ const encryptUploadSchema = z.object({
   data: z.string().optional(),
   policyId: z.string().optional(),
   provider: z.string().optional(),
+  key: z.string().optional(),
+  nonce: z.string().optional(),
 })
 
 const ipfsRetrieveSchema = z.object({
@@ -74,17 +76,91 @@ const ipfsRetrieveSchema = z.object({
   nonce: z.string().optional(),
 })
 
-function encryptBuffer(plaintext) {
-  const key = randomBytes(32)
-  const iv = randomBytes(16)
-  const cipher = createCipheriv('aes-256-cbc', key, iv)
+function encryptBuffer(plaintext, customKey = null, customNonce = null) {
+  const key = customKey ? Buffer.from(customKey, 'hex') : randomBytes(32)
+  const iv = customNonce ? Buffer.from(customNonce, 'hex') : randomBytes(12) // ChaCha20-Poly1305 uses 12-byte nonce
+  const cipher = createCipheriv('chacha20-poly1305', key, iv)
   let encrypted = cipher.update(plaintext)
   encrypted = Buffer.concat([encrypted, cipher.final()])
-  return { key, nonce: iv, ciphertext: encrypted }
+  const authTag = cipher.getAuthTag() // Get the authentication tag
+  return { key, nonce: iv, ciphertext: encrypted, authTag }
 }
 
 function hex(buf) {
   return Buffer.from(buf).toString('hex')
+}
+
+function decryptBuffer(ciphertext, key, nonce, authTag = null) {
+  const decipher = createDecipheriv('chacha20-poly1305', key, nonce)
+  if (authTag) {
+    decipher.setAuthTag(authTag)
+  }
+  let decrypted = decipher.update(ciphertext)
+  decrypted = Buffer.concat([decrypted, decipher.final()])
+  return decrypted
+}
+
+// Old decryption function for backward compatibility (tries multiple algorithms)
+function decryptBufferOld(ciphertext, key, nonce) {
+  console.log('Trying backward compatibility decryption with nonce length:', nonce.length)
+  
+  // Try different approaches based on nonce length
+  const attempts = []
+  
+  // For 12-byte nonce, try ChaCha20-Poly1305 and AES-256-GCM
+  if (nonce.length === 12) {
+    attempts.push(
+      { name: 'ChaCha20-Poly1305', algo: 'chacha20-poly1305', iv: nonce },
+      { name: 'AES-256-GCM', algo: 'aes-256-gcm', iv: nonce }
+    )
+  }
+  
+  // For 16-byte nonce, try AES-256-CBC
+  if (nonce.length === 16) {
+    attempts.push(
+      { name: 'AES-256-CBC', algo: 'aes-256-cbc', iv: nonce }
+    )
+  }
+  
+  // For 24-byte nonce (extended), try different approaches
+  if (nonce.length === 24) {
+    // Try using first 12 bytes as nonce
+    const nonce12 = nonce.slice(0, 12)
+    attempts.push(
+      { name: 'ChaCha20-Poly1305 (12-byte)', algo: 'chacha20-poly1305', iv: nonce12 },
+      { name: 'AES-256-GCM (12-byte)', algo: 'aes-256-gcm', iv: nonce12 }
+    )
+    
+    // Try using first 16 bytes as IV
+    const iv16 = nonce.slice(0, 16)
+    attempts.push(
+      { name: 'AES-256-CBC (16-byte)', algo: 'aes-256-cbc', iv: iv16 }
+    )
+  }
+  
+  // Always try AES-256-CBC with padded nonce as fallback
+  if (nonce.length === 12) {
+    const paddedIv = Buffer.concat([nonce, Buffer.alloc(4)])
+    attempts.push(
+      { name: 'AES-256-CBC (padded)', algo: 'aes-256-cbc', iv: paddedIv }
+    )
+  }
+  
+  // Try each algorithm
+  for (const attempt of attempts) {
+    try {
+      console.log(`Trying ${attempt.name}...`)
+      const decipher = createDecipheriv(attempt.algo, key, attempt.iv)
+      let decrypted = decipher.update(ciphertext)
+      decrypted = Buffer.concat([decrypted, decipher.final()])
+      console.log(`${attempt.name} succeeded!`)
+      return decrypted
+    } catch (error) {
+      console.log(`${attempt.name} failed:`, error.message)
+    }
+  }
+  
+  throw new Error(`All decryption methods failed. Tried ${attempts.length} algorithms.`)
 }
 
 app.post('/encrypt-upload', upload.single('file'), async (req, res) => {
@@ -107,12 +183,33 @@ app.post('/encrypt-upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'File too large. Maximum size is 10MB.' })
     }
 
-    const { key, nonce, ciphertext } = encryptBuffer(buffer)
+    // Use custom key/nonce if provided, otherwise generate random ones
+    const customKey = req.body.key
+    const customNonce = req.body.nonce
     
-    // Upload to Pinata
+    console.log('Encryption request:', {
+      hasCustomKey: !!customKey,
+      hasCustomNonce: !!customNonce,
+      keyLength: customKey?.length,
+      nonceLength: customNonce?.length,
+      keyPreview: customKey?.slice(0, 16),
+      noncePreview: customNonce?.slice(0, 16)
+    })
+    
+    const { key, nonce, ciphertext, authTag } = encryptBuffer(buffer, customKey, customNonce)
+    
+    console.log('Encryption result:', {
+      keyLength: key.length,
+      nonceLength: nonce.length,
+      authTagLength: authTag.length,
+      ciphertextLength: ciphertext.length
+    })
+    
+    // Upload to Pinata with authTag included
     const { IpfsHash } = await pinata.pinJSONToIPFS({
       type: 'shadow-encrypted-binary',
       payload: ciphertext.toString('base64'),
+      authTag: authTag.toString('base64'),
     })
 
     const salt = randomBytes(16)
@@ -133,6 +230,7 @@ app.post('/encrypt-upload', upload.single('file'), async (req, res) => {
       salt: '0x' + hex(salt),
       key: key.toString('base64'),
       nonce: '0x' + hex(nonce),
+      authTag: authTag.toString('base64'),
       size: buffer.length,
     })
   } catch (err) {
@@ -205,19 +303,139 @@ app.post('/decrypt', async (req, res) => {
       return res.status(400).json({ error: 'Key and nonce required for decryption' })
     }
 
-    // TODO: Implement actual decryption
-    // 1. Fetch encrypted data from Pinata gateway
-    // 2. Decrypt using provided key and nonce
-    // 3. Return decrypted data
+    // Fetch encrypted data from Pinata gateway
+    const gatewayUrl = `https://gateway.pinata.cloud/ipfs/${cid}`
+    const response = await fetch(gatewayUrl)
+    
+    if (!response.ok) {
+      return res.status(404).json({ 
+        error: 'Data not found on IPFS',
+        message: 'The requested data could not be retrieved from IPFS'
+      })
+    }
+
+    const encryptedData = await response.json()
+    
+    console.log('Retrieved data from IPFS:', {
+      hasPayload: !!encryptedData.payload,
+      hasAuthTag: !!encryptedData.authTag,
+      payloadLength: encryptedData.payload?.length,
+      authTagLength: encryptedData.authTag?.length,
+      dataKeys: Object.keys(encryptedData)
+    })
+    
+    // Check if payload is suspiciously small (might be a different format)
+    const payloadSize = Buffer.from(encryptedData.payload, 'base64').length
+    console.log('Decoded payload size:', payloadSize, 'bytes')
+    
+    if (payloadSize < 16) {
+      console.log('⚠️  Payload is very small, might be a different encryption format')
+    }
+    
+    if (!encryptedData.payload) {
+      return res.status(400).json({ 
+        error: 'Invalid data format',
+        message: 'The data on IPFS is not in the expected format'
+      })
+    }
+
+    // Decrypt the data
+    const ciphertext = Buffer.from(encryptedData.payload, 'base64')
+    const keyBuffer = Buffer.from(key, 'hex')
+    const nonceBuffer = Buffer.from(nonce, 'hex')
+    
+    // Handle different authTag formats
+    let authTag = null
+    if (encryptedData.authTag) {
+      try {
+        // Try base64 first
+        authTag = Buffer.from(encryptedData.authTag, 'base64')
+        console.log('AuthTag from base64, length:', authTag.length)
+      } catch (error) {
+        try {
+          // Try hex if base64 fails
+          authTag = Buffer.from(encryptedData.authTag, 'hex')
+          console.log('AuthTag from hex, length:', authTag.length)
+        } catch (error2) {
+          console.log('Could not parse authTag:', error2.message)
+          authTag = null
+        }
+      }
+    }
+    
+    let decryptedBuffer
+    try {
+      console.log('Attempting decryption with key length:', keyBuffer.length, 'nonce length:', nonceBuffer.length, 'authTag:', !!authTag)
+      console.log('Key (first 16 chars):', key.slice(0, 16), 'Nonce (first 16 chars):', nonce.slice(0, 16))
+      
+      // Validate key and nonce lengths
+      if (keyBuffer.length !== 32) {
+        throw new Error(`Invalid key length: ${keyBuffer.length}, expected 32`)
+      }
+      if (nonceBuffer.length !== 12) {
+        throw new Error(`Invalid nonce length: ${nonceBuffer.length}, expected 12`)
+      }
+      
+      // Try with authTag first (new format)
+      if (authTag) {
+        console.log('Trying new format with authTag...')
+        console.log('AuthTag length:', authTag.length, 'Expected: 16 for ChaCha20-Poly1305')
+        
+        // Try ChaCha20-Poly1305 with authTag
+        try {
+          decryptedBuffer = decryptBuffer(ciphertext, keyBuffer, nonceBuffer, authTag)
+          console.log('New format decryption successful!')
+        } catch (error) {
+          console.log('ChaCha20-Poly1305 with authTag failed:', error.message)
+          
+          // If authTag is 12 bytes, it might be a different format
+          if (authTag.length === 12) {
+            console.log('AuthTag is 12 bytes, trying different approach...')
+            // Try using the authTag as additional nonce data
+            const extendedNonce = Buffer.concat([nonceBuffer, authTag])
+            console.log('Trying with extended nonce (24 bytes)...')
+            decryptedBuffer = decryptBufferOld(ciphertext, keyBuffer, extendedNonce)
+            console.log('Extended nonce decryption successful!')
+          } else {
+            throw error
+          }
+        }
+      } else {
+        console.log('No authTag found, trying old format...')
+        // Fallback to old format without authTag (backward compatibility)
+        decryptedBuffer = decryptBufferOld(ciphertext, keyBuffer, nonceBuffer)
+        console.log('Old format decryption successful!')
+      }
+    } catch (error) {
+      console.log('Decryption with authTag failed, trying old format:', error.message)
+      // If new format fails, try old format
+      try {
+        decryptedBuffer = decryptBufferOld(ciphertext, keyBuffer, nonceBuffer)
+        console.log('Fallback decryption successful!')
+      } catch (fallbackError) {
+        console.error('All decryption methods failed:', fallbackError.message)
+        throw new Error('Unable to decrypt data with any supported method')
+      }
+    }
+    
+    const decryptedData = decryptedBuffer.toString('utf8')
 
     return res.json({
       success: true,
-      message: 'Decryption endpoint ready - implementation pending',
       cid,
-      decrypted: false
+      data: decryptedData,
+      size: decryptedBuffer.length
     })
   } catch (err) {
     console.error('Decrypt error:', err)
+    
+    if (err.message?.includes('Invalid key') || err.message?.includes('bad decrypt')) {
+      return res.status(400).json({ 
+        error: 'Decryption failed',
+        message: 'Invalid key or nonce provided'
+      })
+    }
+    
     return res.status(500).json({ 
       error: 'Decryption failed',
       message: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'

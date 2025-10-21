@@ -14,11 +14,15 @@ interface PurchasedSignal {
   price: string
   stake: string
   commitTime: string
-  status: 'locked' | 'revealed' | 'verified' | 'settled'
+  status: 'available' | 'locked' | 'revealed' | 'verified' | 'settled'
   verificationScore?: number
   category: string
   transactionHash?: string
   purchaseTime: string
+  encryptionKey?: string
+  nonce?: string
+  cid?: string
+  isLoading?: boolean
 }
 
 interface UserSignalsContextType {

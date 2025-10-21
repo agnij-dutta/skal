@@ -22,8 +22,11 @@ import {
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { useCommitTask, useRevealTask, useGetTask, useWatchCommitRegistryEvents, useWatchEscrowManagerEvents } from '@/lib/contracts/hooks'
+import { useGetTotalTasks } from '@/lib/contracts/hooks/useCommitRegistry'
 import { storageClient } from '@/lib/storage-client'
 import { useAccount } from 'wagmi'
+import { generateDeterministicKey, generateDeterministicNonce } from '@/lib/crypto-utils'
+import { CONTRACT_ADDRESSES } from '@/lib/somnia-config'
 
 interface CommitStep {
   id: string
@@ -96,33 +99,96 @@ function CommitContent() {
   const commitTask = useCommitTask()
   const revealTask = useRevealTask()
   const taskData = useGetTask(taskId || undefined)
+  const { totalTasks } = useGetTotalTasks()
+
+  // Fallback: Extract task ID from transaction receipt if event hasn't arrived
+  useEffect(() => {
+    if (commitTask.isConfirmed && commitTask.receipt && currentStep === 1 && !taskId) {
+      console.log('Commit transaction confirmed, extracting task ID from receipt...')
+      
+      // Try to extract task ID from receipt logs
+      try {
+        const logs = commitTask.receipt.logs
+        console.log('Transaction logs:', logs)
+        
+        // Find the TaskCommitted event in the logs
+        // The TaskCommitted event should have the taskId as the first topic (after the event signature)
+        const taskCommittedLog = logs.find((log: any) => 
+          log.address.toLowerCase() === CONTRACT_ADDRESSES.COMMIT_REGISTRY.toLowerCase()
+        )
+        
+        if (taskCommittedLog && taskCommittedLog.topics && taskCommittedLog.topics.length > 1) {
+          // The taskId is typically in the second topic (topics[1])
+          const taskIdHex = taskCommittedLog.topics[1]
+          if (taskIdHex) {
+            const extractedTaskId = parseInt(taskIdHex, 16)
+            console.log('Extracted task ID from receipt:', extractedTaskId)
+            setTaskId(extractedTaskId)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to extract task ID from receipt:', error)
+      }
+      
+      // Move to waiting for buyer
+      setCurrentStep(2)
+      toast.success('Commit submitted successfully!')
+    }
+  }, [commitTask.isConfirmed, commitTask.receipt, currentStep, taskId])
+
+  // Try to get task ID from total tasks count when transaction is confirmed
+  // REMOVED: This fallback was causing incorrect task IDs
+  // The TaskCommitted event is the source of truth for the task ID
+
+  useEffect(() => {
+    if (revealTask.isConfirmed && revealTask.hash && currentStep === 3) {
+      console.log('Reveal transaction confirmed, moving to verification step')
+      setCurrentStep(4) // Move to verification
+      taskData.refetch?.()
+      toast.success('Data revealed successfully! Moving to verification...')
+    }
+  }, [revealTask.isConfirmed, revealTask.hash, currentStep, taskData])
 
   // Watch for CommitRegistry events (commit, reveal, validate, settle)
   useWatchCommitRegistryEvents(
     (event) => {
+      console.log('TaskCommitted event received:', event)
       if (event.provider.toLowerCase() === address?.toLowerCase()) {
         setTaskId(Number(event.taskId))
+        // Always move to waiting for buyer first - let EscrowManager events handle buyer detection
         setCurrentStep(2) // Move to waiting for buyer
         taskData.refetch?.()
         toast.success('Commit submitted successfully!')
+        
+        // Regenerate encryption key with actual task ID for future use
+        if (uploadResult) {
+          generateDeterministicKey(address, Number(event.taskId)).then(key => {
+            console.log('Regenerated key for task:', Number(event.taskId), 'Key:', key.slice(0, 16) + '...')
+          })
+        }
       }
     },
     (event) => {
+      console.log('TaskRevealed event received:', event, 'Current taskId:', taskId)
       if (taskId && Number(event.taskId) === taskId) {
+        console.log('Moving to verification step after reveal')
         setCurrentStep(4) // Move to verification after reveal
         taskData.refetch?.()
-        toast.success('Data revealed successfully!')
+        toast.success('Data revealed successfully! Moving to verification...')
       }
     },
     (event) => {
+      console.log('TaskValidated event received:', event, 'Current taskId:', taskId)
       if (taskId && Number(event.taskId) === taskId) {
         // Verification completed (score available)
         setVerificationScore(Number(event.score))
         setCurrentStep(4)
         taskData.refetch?.()
+        toast.success('Verification completed!')
       }
     },
     (event) => {
+      console.log('TaskSettled event received:', event, 'Current taskId:', taskId)
       if (taskId && Number(event.taskId) === taskId) {
         setPayoutAmount(event.payout.toString())
         setCurrentStep(5) // Move to settlement
@@ -147,6 +213,7 @@ function CommitContent() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+
   const handlePrepareOutput = async () => {
     if (!formData.outputData.trim()) {
       toast.error('Please provide your AI output data')
@@ -161,12 +228,24 @@ function CommitContent() {
     setIsProcessing(true)
     
     try {
-      // Upload and encrypt data to IPFS
+      // Generate deterministic key and nonce for this provider and a temporary task ID
+      // We'll use a temporary task ID (0) for now, the real task ID will be generated by the contract
+      const tempTaskId = 0
+      const key = await generateDeterministicKey(address, tempTaskId)
+      const nonce = await generateDeterministicNonce(address, tempTaskId)
+      
+      console.log('Generated encryption key for provider:', address)
+      console.log('Key:', key.slice(0, 16) + '...')
+      console.log('Nonce:', nonce.slice(0, 16) + '...')
+      
+      // Upload and encrypt data to IPFS with deterministic key
       const result = await storageClient.encryptAndUpload(
         formData.outputData,
         {
           policyId: 'policy_v1',
           provider: address as `0x${string}`,
+          key: key,
+          nonce: nonce
         }
       )
 
@@ -233,11 +312,15 @@ function CommitContent() {
     setIsProcessing(true)
     
     try {
+      console.log('Starting reveal transaction for task:', taskId, 'with CID:', uploadResult.cid)
+      console.log('Current step before reveal:', currentStep)
+      
       // Reveal the task with IPFS CID
       await revealTask.revealTask(taskId, uploadResult.cid)
       
       // The event listener will handle moving to the next step
-      toast.success('Reveal transaction submitted!')
+      toast.success('Reveal transaction submitted! Waiting for verification...')
+      console.log('Reveal transaction submitted successfully')
     } catch (error) {
       console.error('Reveal error:', error)
       toast.error('Failed to reveal data: ' + (error as Error).message)
@@ -460,7 +543,7 @@ function CommitContent() {
                 </div>
                 <div className="flex justify-between">
                   <span>Status:</span>
-                  <Badge variant="outline" className="bg-white/20 text-white border-white/30">
+                  <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
                     {taskData.task ? 'Committed' : 'Waiting for Buyer'}
                   </Badge>
                 </div>
@@ -562,12 +645,26 @@ function CommitContent() {
               <div className="space-y-2 text-white">
                 <div className="flex justify-between">
                   <span>Verification Status:</span>
-                  <Badge variant="outline" className="bg-white/20 text-white border-white/30">In Progress</Badge>
+                  <Badge variant="secondary" className="bg-white/20 text-white border-white/30">In Progress</Badge>
                 </div>
                 <div className="flex justify-between">
                   <span>Estimated Time:</span>
                   <span>2-5 minutes</span>
                 </div>
+              </div>
+
+              {/* Show automatic decryption info */}
+              <div className="p-4 bg-green-500/20 border border-green-400/30 rounded-lg">
+                <div className="flex items-center gap-2 text-green-400 mb-3">
+                  <Shield className="h-4 w-4" />
+                  <span className="font-medium">Automatic Decryption</span>
+                </div>
+                <p className="text-sm text-green-300 mb-2">
+                  Buyers will be able to automatically decrypt your data using a secure key generation system.
+                </p>
+                <p className="text-xs text-green-200">
+                  🔐 No manual key sharing required - the system handles encryption/decryption automatically.
+                </p>
               </div>
 
               <Alert className="bg-white/5 border-white/20">
@@ -619,7 +716,7 @@ function CommitContent() {
                 <Button className="flex-1 bg-white/20 hover:bg-white/30 text-white border-white/30" asChild>
                   <Link href="/markets">View Markets</Link>
                 </Button>
-                <Button variant="outline" className="flex-1 bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
+                <Button className="flex-1 bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
                   <Link href="/commit">Create Another</Link>
                 </Button>
               </div>
