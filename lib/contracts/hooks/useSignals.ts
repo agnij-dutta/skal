@@ -197,7 +197,7 @@ export function useSignals(marketId?: number) {
         taskId: taskIdNum,
         marketId,
         marketName: metadata.name,
-        provider: shortenAddress(providerAddress),
+        provider: providerAddress, // Store full address for key generation
         providerReputation,
         description: `AI output for ${metadata.name}`,
         price: `${price} STT`,

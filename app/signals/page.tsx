@@ -34,6 +34,7 @@ import { AgentType } from '@/lib/contracts/hooks/useAgentRegistry'
 import { useAccount } from 'wagmi'
 import { formatEther } from 'viem'
 import { generateDeterministicKey, generateDeterministicNonce } from '@/lib/crypto-utils'
+import { shortenAddress } from '@/lib/utils'
 
 interface Signal {
   id: string
@@ -153,12 +154,16 @@ function SignalsContent() {
         throw new Error('Task or provider not found in signals list')
       }
 
-      // Generate deterministic key and nonce based on provider address and task ID
-      // This ensures both provider and buyer generate the same keys
-      const key = await generateDeterministicKey(taskFromSignals.provider, taskId)
-      const nonce = await generateDeterministicNonce(taskFromSignals.provider, taskId)
+      // Generate deterministic key and nonce based on provider address
+      // NOTE: We use taskId = 0 because encryption happens before the actual task ID is known
+      // The provider encrypts with tempTaskId = 0, so we must decrypt with the same value
+      const tempTaskId = 0
+      const key = await generateDeterministicKey(taskFromSignals.provider, tempTaskId)
+      const nonce = await generateDeterministicNonce(taskFromSignals.provider, tempTaskId)
       
       console.log('Attempting automatic decryption for task:', taskId, 'with provider:', taskFromSignals.provider)
+      console.log('Using tempTaskId:', tempTaskId, '(encryption happens before real task ID is known)')
+      console.log('Provider address (full):', taskFromSignals.provider)
       console.log('Generated key:', key.slice(0, 16) + '...')
       console.log('Generated nonce:', nonce.slice(0, 16) + '...')
       
@@ -433,7 +438,7 @@ function SignalsContent() {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                           <div>
                             <p className="text-sm text-white/70">Provider</p>
-                            <p className="font-medium text-white">{signal.provider}</p>
+                            <p className="font-medium text-white">{shortenAddress(signal.provider)}</p>
                           </div>
                           <div>
                             <p className="text-sm text-white/70">Reputation</p>
@@ -516,7 +521,7 @@ function SignalsContent() {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div>
                         <p className="text-sm text-white/70">Provider</p>
-                        <p className="font-medium text-white">{signal.provider}</p>
+                        <p className="font-medium text-white">{shortenAddress(signal.provider)}</p>
                       </div>
                       <div>
                         <p className="text-sm text-white/70">Reputation</p>
@@ -572,7 +577,7 @@ function SignalsContent() {
                           <div className="flex items-center gap-4 text-sm text-white/60">
                             <span>Task #{signal.taskId}</span>
                             <span>{signal.commitTime}</span>
-                            <span>Provider: {signal.provider}</span>
+                            <span>Provider: {shortenAddress(signal.provider)}</span>
                             <span>Reputation: {signal.providerReputation}</span>
                           </div>
                         </div>

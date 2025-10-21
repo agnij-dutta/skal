@@ -101,34 +101,53 @@ function CommitContent() {
   const taskData = useGetTask(taskId || undefined)
   const { totalTasks } = useGetTotalTasks()
 
-  // Fallback: Check if commit transaction is confirmed and we haven't progressed yet
+  // Fallback: Extract task ID from transaction receipt if event hasn't arrived
   useEffect(() => {
-    if (commitTask.isConfirmed && commitTask.hash && currentStep === 1 && !taskId) {
-      console.log('Commit transaction confirmed, but no task ID yet. Progressing manually...')
+    if (commitTask.isConfirmed && commitTask.receipt && currentStep === 1 && !taskId) {
+      console.log('Commit transaction confirmed, extracting task ID from receipt...')
       
-      // For now, let's just progress the UI and try to get the task ID later
-      // The task ID will be populated when the event is received or when we can query it
-      setCurrentStep(2) // Move to waiting for buyer
+      // Try to extract task ID from receipt logs
+      try {
+        const logs = commitTask.receipt.logs
+        console.log('Transaction logs:', logs)
+        
+        // Find the TaskCommitted event in the logs
+        // The TaskCommitted event should have the taskId as the first topic (after the event signature)
+        const taskCommittedLog = logs.find((log: any) => 
+          log.address.toLowerCase() === CONTRACT_ADDRESSES.COMMIT_REGISTRY.toLowerCase()
+        )
+        
+        if (taskCommittedLog && taskCommittedLog.topics && taskCommittedLog.topics.length > 1) {
+          // The taskId is typically in the second topic (topics[1])
+          const taskIdHex = taskCommittedLog.topics[1]
+          if (taskIdHex) {
+            const extractedTaskId = parseInt(taskIdHex, 16)
+            console.log('Extracted task ID from receipt:', extractedTaskId)
+            setTaskId(extractedTaskId)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to extract task ID from receipt:', error)
+      }
+      
+      // Move to waiting for buyer
+      setCurrentStep(2)
       toast.success('Commit submitted successfully!')
-      
-      // Try to get the task ID by querying recent tasks
-      // This is a temporary solution - in production, we'd want to extract it from the receipt
-      setTimeout(() => {
-        console.log('Attempting to find task ID by querying recent tasks...')
-        // We'll implement a more robust solution later
-      }, 1000)
     }
-  }, [commitTask.isConfirmed, commitTask.hash, currentStep, taskId])
+  }, [commitTask.isConfirmed, commitTask.receipt, currentStep, taskId])
 
   // Try to get task ID from total tasks count when transaction is confirmed
+  // REMOVED: This fallback was causing incorrect task IDs
+  // The TaskCommitted event is the source of truth for the task ID
+
   useEffect(() => {
-    if (commitTask.isConfirmed && totalTasks && !taskId && currentStep === 2) {
-      // The task ID should be totalTasks - 1 (since it's 0-indexed)
-      const estimatedTaskId = Number(totalTasks) - 1
-      console.log('Estimated task ID from total tasks:', estimatedTaskId)
-      setTaskId(estimatedTaskId)
+    if (revealTask.isConfirmed && revealTask.hash && currentStep === 3) {
+      console.log('Reveal transaction confirmed, moving to verification step')
+      setCurrentStep(4) // Move to verification
+      taskData.refetch?.()
+      toast.success('Data revealed successfully! Moving to verification...')
     }
-  }, [commitTask.isConfirmed, totalTasks, taskId, currentStep])
+  }, [revealTask.isConfirmed, revealTask.hash, currentStep, taskData])
 
   // Watch for CommitRegistry events (commit, reveal, validate, settle)
   useWatchCommitRegistryEvents(
@@ -193,8 +212,6 @@ function CommitContent() {
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
-
-  // Use shared crypto utilities for consistent key generation
 
 
   const handlePrepareOutput = async () => {
