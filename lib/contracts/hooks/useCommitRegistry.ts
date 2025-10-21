@@ -24,7 +24,7 @@ export interface Task {
 
 export function useCommitTask() {
   const { writeContract, data: hash, error, isPending } = useWriteContract()
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+  const { isLoading: isConfirming, isSuccess: isConfirmed, data: receipt } = useWaitForTransactionReceipt({
     hash,
   })
 
@@ -51,6 +51,7 @@ export function useCommitTask() {
     isPending,
     isConfirming,
     isConfirmed,
+    receipt,
     isLoading: isPending || isConfirming,
   }
 }

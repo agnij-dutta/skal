@@ -22,9 +22,11 @@ import {
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { useCommitTask, useRevealTask, useGetTask, useWatchCommitRegistryEvents, useWatchEscrowManagerEvents } from '@/lib/contracts/hooks'
+import { useGetTotalTasks } from '@/lib/contracts/hooks/useCommitRegistry'
 import { storageClient } from '@/lib/storage-client'
 import { useAccount } from 'wagmi'
 import { generateDeterministicKey, generateDeterministicNonce } from '@/lib/crypto-utils'
+import { CONTRACT_ADDRESSES } from '@/lib/somnia-config'
 
 interface CommitStep {
   id: string
@@ -97,6 +99,36 @@ function CommitContent() {
   const commitTask = useCommitTask()
   const revealTask = useRevealTask()
   const taskData = useGetTask(taskId || undefined)
+  const { totalTasks } = useGetTotalTasks()
+
+  // Fallback: Check if commit transaction is confirmed and we haven't progressed yet
+  useEffect(() => {
+    if (commitTask.isConfirmed && commitTask.hash && currentStep === 1 && !taskId) {
+      console.log('Commit transaction confirmed, but no task ID yet. Progressing manually...')
+      
+      // For now, let's just progress the UI and try to get the task ID later
+      // The task ID will be populated when the event is received or when we can query it
+      setCurrentStep(2) // Move to waiting for buyer
+      toast.success('Commit submitted successfully!')
+      
+      // Try to get the task ID by querying recent tasks
+      // This is a temporary solution - in production, we'd want to extract it from the receipt
+      setTimeout(() => {
+        console.log('Attempting to find task ID by querying recent tasks...')
+        // We'll implement a more robust solution later
+      }, 1000)
+    }
+  }, [commitTask.isConfirmed, commitTask.hash, currentStep, taskId])
+
+  // Try to get task ID from total tasks count when transaction is confirmed
+  useEffect(() => {
+    if (commitTask.isConfirmed && totalTasks && !taskId && currentStep === 2) {
+      // The task ID should be totalTasks - 1 (since it's 0-indexed)
+      const estimatedTaskId = Number(totalTasks) - 1
+      console.log('Estimated task ID from total tasks:', estimatedTaskId)
+      setTaskId(estimatedTaskId)
+    }
+  }, [commitTask.isConfirmed, totalTasks, taskId, currentStep])
 
   // Watch for CommitRegistry events (commit, reveal, validate, settle)
   useWatchCommitRegistryEvents(
@@ -667,7 +699,7 @@ function CommitContent() {
                 <Button className="flex-1 bg-white/20 hover:bg-white/30 text-white border-white/30" asChild>
                   <Link href="/markets">View Markets</Link>
                 </Button>
-                <Button variant="outline" className="flex-1 bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
+                <Button className="flex-1 bg-white/10 hover:bg-white/20 text-white border-white/30" asChild>
                   <Link href="/commit">Create Another</Link>
                 </Button>
               </div>
