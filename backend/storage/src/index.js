@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename)
 import multer from 'multer'
 import pinataSDK from '@pinata/sdk'
 import rateLimit from 'express-rate-limit'
-import { randomBytes, createCipheriv, createDecipheriv, createCipher, createDecipher } from 'crypto'
+import { randomBytes, createCipheriv, createDecipheriv } from 'crypto'
 import { sha256 } from '@noble/hashes/sha256'
 import { z } from 'zod'
 
