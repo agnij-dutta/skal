@@ -102,31 +102,49 @@ function decryptBuffer(ciphertext, key, nonce, authTag = null) {
 
 // Old decryption function for backward compatibility (tries multiple algorithms)
 function decryptBufferOld(ciphertext, key, nonce) {
-  // Try ChaCha20-Poly1305 without authTag first
-  try {
-    const decipher = createDecipheriv('chacha20-poly1305', key, nonce)
-    let decrypted = decipher.update(ciphertext)
-    decrypted = Buffer.concat([decrypted, decipher.final()])
-    return decrypted
-  } catch (error) {
-    console.log('ChaCha20-Poly1305 failed, trying AES-256-GCM:', error.message)
-    
-    // Try AES-256-GCM as fallback (old format)
+  console.log('Trying backward compatibility decryption with nonce length:', nonce.length)
+  
+  // Try different approaches based on nonce length
+  const attempts = []
+  
+  // For 12-byte nonce, try ChaCha20-Poly1305 and AES-256-GCM
+  if (nonce.length === 12) {
+    attempts.push(
+      { name: 'ChaCha20-Poly1305', algo: 'chacha20-poly1305', iv: nonce },
+      { name: 'AES-256-GCM', algo: 'aes-256-gcm', iv: nonce }
+    )
+  }
+  
+  // For 16-byte nonce, try AES-256-CBC
+  if (nonce.length === 16) {
+    attempts.push(
+      { name: 'AES-256-CBC', algo: 'aes-256-cbc', iv: nonce }
+    )
+  }
+  
+  // Always try AES-256-CBC with padded nonce as fallback
+  if (nonce.length === 12) {
+    const paddedIv = Buffer.concat([nonce, Buffer.alloc(4)])
+    attempts.push(
+      { name: 'AES-256-CBC (padded)', algo: 'aes-256-cbc', iv: paddedIv }
+    )
+  }
+  
+  // Try each algorithm
+  for (const attempt of attempts) {
     try {
-      const decipher = createDecipheriv('aes-256-gcm', key, nonce)
+      console.log(`Trying ${attempt.name}...`)
+      const decipher = createDecipheriv(attempt.algo, key, attempt.iv)
       let decrypted = decipher.update(ciphertext)
       decrypted = Buffer.concat([decrypted, decipher.final()])
+      console.log(`${attempt.name} succeeded!`)
       return decrypted
-    } catch (error2) {
-      console.log('AES-256-GCM failed, trying AES-256-CBC:', error2.message)
-      
-      // Try AES-256-CBC as last resort
-      const decipher = createDecipheriv('aes-256-cbc', key, nonce)
-      let decrypted = decipher.update(ciphertext)
-      decrypted = Buffer.concat([decrypted, decipher.final()])
-      return decrypted
+    } catch (error) {
+      console.log(`${attempt.name} failed:`, error.message)
     }
   }
+  
+  throw new Error(`All decryption methods failed. Tried ${attempts.length} algorithms.`)
 }
 
 app.post('/encrypt-upload', upload.single('file'), async (req, res) => {
@@ -264,6 +282,14 @@ app.post('/decrypt', async (req, res) => {
     }
 
     const encryptedData = await response.json()
+    
+    console.log('Retrieved data from IPFS:', {
+      hasPayload: !!encryptedData.payload,
+      hasAuthTag: !!encryptedData.authTag,
+      payloadLength: encryptedData.payload?.length,
+      authTagLength: encryptedData.authTag?.length,
+      dataKeys: Object.keys(encryptedData)
+    })
     
     if (!encryptedData.payload) {
       return res.status(400).json({ 
