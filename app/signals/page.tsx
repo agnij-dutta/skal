@@ -33,6 +33,7 @@ import { useUserSignalsContext } from '@/lib/contexts/UserSignalsContext'
 import { AgentType } from '@/lib/contracts/hooks/useAgentRegistry'
 import { useAccount } from 'wagmi'
 import { formatEther } from 'viem'
+import { generateDeterministicKey, generateDeterministicNonce } from '@/lib/crypto-utils'
 
 interface Signal {
   id: string
@@ -98,10 +99,10 @@ function SignalsContent() {
 
   // Show success toast when transaction is confirmed
   useEffect(() => {
-    if (lockFunds.isSuccess && lockFunds.hash) {
+    if (lockFunds.isConfirmed && lockFunds.hash) {
       toast.success(`Successfully locked funds! Transaction: ${lockFunds.hash.slice(0, 10)}...`)
     }
-  }, [lockFunds.isSuccess, lockFunds.hash])
+  }, [lockFunds.isConfirmed, lockFunds.hash])
 
   // Advance purchased signal status when FundsLocked/Revealed/Validated/Settled occur
   useWatchEscrowManagerEvents((ev) => {
@@ -166,12 +167,16 @@ function SignalsContent() {
       const nonce = await generateDeterministicNonce(task.provider, taskId)
       
       console.log('Attempting automatic decryption for task:', taskId, 'with provider:', task.provider)
+      console.log('Generated key:', key.slice(0, 16) + '...')
+      console.log('Generated nonce:', nonce.slice(0, 16) + '...')
+      
       const res = await decryptData(cid, key, nonce)
       
-      if (res.success) {
+      if (res.success && res.data) {
         setViewer({ open: true, taskId, cid, content: res.data })
         toast.success('Data automatically decrypted!')
       } else {
+        console.error('Decryption failed:', res)
         // If automatic decryption fails, show manual decryption interface
         setViewer({ open: true, taskId, cid })
         toast.info('Automatic decryption failed. Please enter the decryption details manually.')
@@ -184,26 +189,7 @@ function SignalsContent() {
     }
   }
 
-  const generateDeterministicKey = async (providerAddress: string, taskId: number): Promise<string> => {
-    // Generate a deterministic key based on provider address and task ID
-    // This ensures both provider and buyer generate the same key
-    const seed = `skal-${providerAddress}-${taskId}-${process.env.NEXT_PUBLIC_APP_SECRET || 'skal-default-secret'}`
-    const encoder = new TextEncoder()
-    const data = encoder.encode(seed)
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-    const hashArray = Array.from(new Uint8Array(hashBuffer))
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 64)
-  }
-
-  const generateDeterministicNonce = async (providerAddress: string, taskId: number): Promise<string> => {
-    // Generate a deterministic nonce based on provider address and task ID
-    const seed = `skal-nonce-${providerAddress}-${taskId}-${process.env.NEXT_PUBLIC_APP_SECRET || 'skal-default-secret'}`
-    const encoder = new TextEncoder()
-    const data = encoder.encode(seed)
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-    const hashArray = Array.from(new Uint8Array(hashBuffer))
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32)
-  }
+  // Use shared crypto utilities for consistent key generation
 
 
   const handleDecrypt = async (cid: string, key: string, nonce: string) => {
@@ -300,7 +286,7 @@ function SignalsContent() {
     const variants = {
       available: 'default',
       locked: 'secondary',
-      revealed: 'outline',
+      revealed: 'secondary',
       verified: 'default',
       settled: 'secondary'
     } as const
@@ -314,7 +300,7 @@ function SignalsContent() {
     }
 
     return (
-      <Badge variant={variants[status as keyof typeof variants] || 'outline'}>
+      <Badge variant={variants[status as keyof typeof variants] || 'secondary'}>
         <span className={colors[status as keyof typeof colors] || 'text-gray-600'}>
           {status.charAt(0).toUpperCase() + status.slice(1)}
         </span>

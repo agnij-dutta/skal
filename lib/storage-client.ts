@@ -43,6 +43,8 @@ export class StorageClient {
     options: {
       policyId?: string
       provider?: string
+      key?: string
+      nonce?: string
     } = {}
   ): Promise<EncryptUploadResponse> {
     const formData = new FormData()
@@ -59,6 +61,14 @@ export class StorageClient {
     
     if (options.provider) {
       formData.append('provider', options.provider)
+    }
+    
+    if (options.key) {
+      formData.append('key', options.key)
+    }
+    
+    if (options.nonce) {
+      formData.append('nonce', options.nonce)
     }
 
     const response = await fetch(`${this.baseUrl}/encrypt-upload`, {

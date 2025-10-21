@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename)
 import multer from 'multer'
 import pinataSDK from '@pinata/sdk'
 import rateLimit from 'express-rate-limit'
-import { randomBytes, createCipheriv, createDecipheriv } from 'crypto'
+import { randomBytes, createCipheriv, createDecipheriv, createCipher, createDecipher } from 'crypto'
 import { sha256 } from '@noble/hashes/sha256'
 import { z } from 'zod'
 
@@ -78,8 +78,8 @@ const ipfsRetrieveSchema = z.object({
 
 function encryptBuffer(plaintext, customKey = null, customNonce = null) {
   const key = customKey ? Buffer.from(customKey, 'hex') : randomBytes(32)
-  const iv = customNonce ? Buffer.from(customNonce, 'hex') : randomBytes(16)
-  const cipher = createCipheriv('aes-256-cbc', key, iv)
+  const iv = customNonce ? Buffer.from(customNonce, 'hex') : randomBytes(12) // XChaCha20 uses 12-byte nonce
+  const cipher = createCipheriv('chacha20-poly1305', key, iv)
   let encrypted = cipher.update(plaintext)
   encrypted = Buffer.concat([encrypted, cipher.final()])
   return { key, nonce: iv, ciphertext: encrypted }
@@ -90,7 +90,7 @@ function hex(buf) {
 }
 
 function decryptBuffer(ciphertext, key, nonce) {
-  const decipher = createDecipheriv('aes-256-cbc', key, nonce)
+  const decipher = createDecipheriv('chacha20-poly1305', key, nonce)
   let decrypted = decipher.update(ciphertext)
   decrypted = Buffer.concat([decrypted, decipher.final()])
   return decrypted
