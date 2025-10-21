@@ -101,6 +101,7 @@ function CommitContent() {
   // Watch for CommitRegistry events (commit, reveal, validate, settle)
   useWatchCommitRegistryEvents(
     (event) => {
+      console.log('TaskCommitted event received:', event)
       if (event.provider.toLowerCase() === address?.toLowerCase()) {
         setTaskId(Number(event.taskId))
         // Always move to waiting for buyer first - let EscrowManager events handle buyer detection
@@ -117,23 +118,26 @@ function CommitContent() {
       }
     },
     (event) => {
-      console.log('Reveal event received:', event, 'Current taskId:', taskId)
+      console.log('TaskRevealed event received:', event, 'Current taskId:', taskId)
       if (taskId && Number(event.taskId) === taskId) {
         console.log('Moving to verification step after reveal')
         setCurrentStep(4) // Move to verification after reveal
         taskData.refetch?.()
-        toast.success('Data revealed successfully!')
+        toast.success('Data revealed successfully! Moving to verification...')
       }
     },
     (event) => {
+      console.log('TaskValidated event received:', event, 'Current taskId:', taskId)
       if (taskId && Number(event.taskId) === taskId) {
         // Verification completed (score available)
         setVerificationScore(Number(event.score))
         setCurrentStep(4)
         taskData.refetch?.()
+        toast.success('Verification completed!')
       }
     },
     (event) => {
+      console.log('TaskSettled event received:', event, 'Current taskId:', taskId)
       if (taskId && Number(event.taskId) === taskId) {
         setPayoutAmount(event.payout.toString())
         setCurrentStep(5) // Move to settlement
@@ -260,11 +264,13 @@ function CommitContent() {
     
     try {
       console.log('Starting reveal transaction for task:', taskId, 'with CID:', uploadResult.cid)
+      console.log('Current step before reveal:', currentStep)
+      
       // Reveal the task with IPFS CID
       await revealTask.revealTask(taskId, uploadResult.cid)
       
       // The event listener will handle moving to the next step
-      toast.success('Reveal transaction submitted!')
+      toast.success('Reveal transaction submitted! Waiting for verification...')
       console.log('Reveal transaction submitted successfully')
     } catch (error) {
       console.error('Reveal error:', error)

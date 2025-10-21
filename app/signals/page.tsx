@@ -128,45 +128,37 @@ function SignalsContent() {
 
   const openViewerForTask = async (taskId: number) => {
     try {
-      // Try to get task data from the contract
-      const { task } = useGetTask(taskId)
+      // First try to find the task in the signals list
+      const taskFromSignals = allSignals.find(s => s.taskId === taskId)
       
-      if (task && task.cid) {
+      if (taskFromSignals && taskFromSignals.cid) {
         // Try to automatically decrypt using a shared key mechanism
-        await attemptAutomaticDecryption(taskId, task.cid)
+        await attemptAutomaticDecryption(taskId, taskFromSignals.cid)
         return
       }
+      
+      // If no CID available, show error
+      toast.error('Data not yet revealed by provider. Please wait for the provider to reveal their data.')
     } catch (error) {
-      console.log('Could not fetch task data directly:', error)
+      console.error('Error opening viewer for task:', error)
+      toast.error('Failed to open data viewer. Please try again.')
     }
-    
-    // Fallback: use multicall list from useSignals
-    const taskFromSignals = allSignals.find(s => s.taskId === taskId)
-    
-    if (taskFromSignals && taskFromSignals.cid) {
-      // Try to automatically decrypt using a shared key mechanism
-      await attemptAutomaticDecryption(taskId, taskFromSignals.cid)
-      return
-    }
-    
-    // If no CID available, show error
-    toast.error('Data not yet revealed by provider. Please wait for the provider to reveal their data.')
   }
 
   const attemptAutomaticDecryption = async (taskId: number, cid: string) => {
     try {
-      // Get the full provider address from the contract
-      const { task } = useGetTask(taskId)
-      if (!task || !task.provider) {
-        throw new Error('Task or provider not found')
+      // Find the task in the signals list to get provider address
+      const taskFromSignals = allSignals.find(s => s.taskId === taskId)
+      if (!taskFromSignals || !taskFromSignals.provider) {
+        throw new Error('Task or provider not found in signals list')
       }
 
       // Generate deterministic key and nonce based on provider address and task ID
       // This ensures both provider and buyer generate the same keys
-      const key = await generateDeterministicKey(task.provider, taskId)
-      const nonce = await generateDeterministicNonce(task.provider, taskId)
+      const key = await generateDeterministicKey(taskFromSignals.provider, taskId)
+      const nonce = await generateDeterministicNonce(taskFromSignals.provider, taskId)
       
-      console.log('Attempting automatic decryption for task:', taskId, 'with provider:', task.provider)
+      console.log('Attempting automatic decryption for task:', taskId, 'with provider:', taskFromSignals.provider)
       console.log('Generated key:', key.slice(0, 16) + '...')
       console.log('Generated nonce:', nonce.slice(0, 16) + '...')
       

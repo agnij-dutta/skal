@@ -78,19 +78,23 @@ const ipfsRetrieveSchema = z.object({
 
 function encryptBuffer(plaintext, customKey = null, customNonce = null) {
   const key = customKey ? Buffer.from(customKey, 'hex') : randomBytes(32)
-  const iv = customNonce ? Buffer.from(customNonce, 'hex') : randomBytes(12) // XChaCha20 uses 12-byte nonce
+  const iv = customNonce ? Buffer.from(customNonce, 'hex') : randomBytes(12) // ChaCha20-Poly1305 uses 12-byte nonce
   const cipher = createCipheriv('chacha20-poly1305', key, iv)
   let encrypted = cipher.update(plaintext)
   encrypted = Buffer.concat([encrypted, cipher.final()])
-  return { key, nonce: iv, ciphertext: encrypted }
+  const authTag = cipher.getAuthTag() // Get the authentication tag
+  return { key, nonce: iv, ciphertext: encrypted, authTag }
 }
 
 function hex(buf) {
   return Buffer.from(buf).toString('hex')
 }
 
-function decryptBuffer(ciphertext, key, nonce) {
+function decryptBuffer(ciphertext, key, nonce, authTag = null) {
   const decipher = createDecipheriv('chacha20-poly1305', key, nonce)
+  if (authTag) {
+    decipher.setAuthTag(authTag)
+  }
   let decrypted = decipher.update(ciphertext)
   decrypted = Buffer.concat([decrypted, decipher.final()])
   return decrypted
@@ -119,12 +123,13 @@ app.post('/encrypt-upload', upload.single('file'), async (req, res) => {
     // Use custom key/nonce if provided, otherwise generate random ones
     const customKey = req.body.key
     const customNonce = req.body.nonce
-    const { key, nonce, ciphertext } = encryptBuffer(buffer, customKey, customNonce)
+    const { key, nonce, ciphertext, authTag } = encryptBuffer(buffer, customKey, customNonce)
     
-    // Upload to Pinata
+    // Upload to Pinata with authTag included
     const { IpfsHash } = await pinata.pinJSONToIPFS({
       type: 'shadow-encrypted-binary',
       payload: ciphertext.toString('base64'),
+      authTag: authTag.toString('base64'),
     })
 
     const salt = randomBytes(16)
@@ -145,6 +150,7 @@ app.post('/encrypt-upload', upload.single('file'), async (req, res) => {
       salt: '0x' + hex(salt),
       key: key.toString('base64'),
       nonce: '0x' + hex(nonce),
+      authTag: authTag.toString('base64'),
       size: buffer.length,
     })
   } catch (err) {
@@ -241,8 +247,9 @@ app.post('/decrypt', async (req, res) => {
     const ciphertext = Buffer.from(encryptedData.payload, 'base64')
     const keyBuffer = Buffer.from(key, 'hex')
     const nonceBuffer = Buffer.from(nonce, 'hex')
+    const authTag = encryptedData.authTag ? Buffer.from(encryptedData.authTag, 'base64') : null
     
-    const decryptedBuffer = decryptBuffer(ciphertext, keyBuffer, nonceBuffer)
+    const decryptedBuffer = decryptBuffer(ciphertext, keyBuffer, nonceBuffer, authTag)
     const decryptedData = decryptedBuffer.toString('utf8')
 
     return res.json({
