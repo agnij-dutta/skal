@@ -27,6 +27,7 @@ import { storageClient } from '@/lib/storage-client'
 import { useAccount } from 'wagmi'
 import { generateDeterministicKey, generateDeterministicNonce } from '@/lib/crypto-utils'
 import { CONTRACT_ADDRESSES } from '@/lib/somnia-config'
+import { useOracleStatus, useWatchOracleEvents } from '@/lib/contracts/hooks/useOracle'
 
 interface CommitStep {
   id: string
@@ -197,6 +198,33 @@ function CommitContent() {
       }
     }
   )
+
+  // Get oracle verification status
+  const oracleStatus = useOracleStatus(taskId !== null ? taskId : undefined)
+
+  // Watch for oracle events
+  useWatchOracleEvents({
+    onVerificationSubmitted: (event) => {
+      if (taskId && Number(event.taskId) === taskId) {
+        toast.info(`Oracle submitted verification (score: ${event.score})`)
+        oracleStatus.refetch()
+      }
+    },
+    onConsensusReached: (event) => {
+      if (taskId && Number(event.taskId) === taskId) {
+        toast.success(`Consensus reached! Final score: ${event.finalScore}`)
+        oracleStatus.refetch()
+      }
+    },
+    onTaskFinalized: (event) => {
+      if (taskId && Number(event.taskId) === taskId) {
+        setVerificationScore(event.finalScore)
+        toast.success(`Verification finalized by ${event.verifiers.length} oracles!`)
+        oracleStatus.refetch()
+        taskData.refetch?.()
+      }
+    },
+  })
 
   // Watch for EscrowManager events (buyer locks funds)
   useWatchEscrowManagerEvents(
@@ -626,9 +654,9 @@ function CommitContent() {
         return (
           <Card className="backdrop-blur-md bg-white/10 border-white/20 shadow-xl">
             <CardHeader>
-              <CardTitle className="text-white">Verification in Progress</CardTitle>
+              <CardTitle className="text-white">Oracle Verification in Progress</CardTitle>
               <CardDescription className="text-white/80">
-                Your data is being verified by the network
+                Multiple oracles are independently verifying your data
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -637,19 +665,46 @@ function CommitContent() {
                   <Shield className="h-8 w-8 text-orange-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-white">Verification in Progress</h3>
-                  <p className="text-white/70">Verifiers are checking your data</p>
+                  <h3 className="font-semibold text-white">{oracleStatus.message}</h3>
+                  <p className="text-white/70">
+                    {oracleStatus.stage === 'collecting' && `${oracleStatus.submissionCount} of ${oracleStatus.oracleCount || 3} oracles submitted`}
+                    {oracleStatus.stage === 'consensus' && 'Consensus reached, finalizing...'}
+                    {oracleStatus.stage === 'finalized' && 'Verification complete!'}
+                    {oracleStatus.stage === 'idle' && 'Waiting for oracle submissions...'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Oracle Progress Bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm text-white/80">
+                  <span>Oracle Progress</span>
+                  <span>{Math.round(oracleStatus.progress)}%</span>
+                </div>
+                <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-orange-400 to-orange-500 transition-all duration-500"
+                    style={{ width: `${oracleStatus.progress}%` }}
+                  />
                 </div>
               </div>
 
               <div className="space-y-2 text-white">
                 <div className="flex justify-between">
-                  <span>Verification Status:</span>
-                  <Badge variant="secondary" className="bg-white/20 text-white border-white/30">In Progress</Badge>
+                  <span>Oracle Submissions:</span>
+                  <Badge className="bg-white/20 text-white border-white/30">
+                    {oracleStatus.submissionCount} / {oracleStatus.oracleCount || 3}
+                  </Badge>
                 </div>
                 <div className="flex justify-between">
-                  <span>Estimated Time:</span>
-                  <span>2-5 minutes</span>
+                  <span>Consensus Status:</span>
+                  <Badge className="bg-white/20 text-white border-white/30">
+                    {oracleStatus.hasConsensus ? '✓ Reached' : 'Pending'}
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span>Time Remaining:</span>
+                  <span>{oracleStatus.timeRemaining > 0 ? `${Math.floor(oracleStatus.timeRemaining / 60)}m ${oracleStatus.timeRemaining % 60}s` : 'N/A'}</span>
                 </div>
               </div>
 

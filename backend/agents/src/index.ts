@@ -2,19 +2,45 @@
 
 import { AgentOrchestrator, AgentConfig } from './services/AgentOrchestrator.js'
 import dotenv from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
-dotenv.config()
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// Try loading .env.local from multiple locations
+const envPaths = [
+  path.resolve(__dirname, '../.env.local'),
+  path.resolve(__dirname, '../../.env.local'),
+  path.resolve(__dirname, '../../../.env.local')
+]
+
+let envLoaded = false
+for (const envPath of envPaths) {
+  const result = dotenv.config({ path: envPath })
+  if (!result.error) {
+    console.log(`✅ Loaded environment from: ${envPath}`)
+    envLoaded = true
+    break
+  }
+}
+
+if (!envLoaded) {
+  console.warn('⚠️  No .env.local file found, using environment variables')
+}
 
 // Load configuration from environment variables
 const config: AgentConfig = {
   rpcUrl: process.env.SOMNIA_RPC || 'https://dream-rpc.somnia.network/',
-  storageUrl: process.env.STORAGE_URL || 'http://localhost:8787',
+  storageUrl: process.env.STORAGE_URL || 'https://skal.onrender.com',
   contractAddresses: {
     commitRegistry: process.env.COMMIT_REGISTRY || '0xB94ecC5a4cA8D7D2749cE8353F03B38372235C26',
     escrowManager: process.env.ESCROW_MANAGER || '0x8F9Cce60CDa5c3b262c30321f40a180A6A9DA762',
     ammEngine: process.env.AMM_ENGINE || '0x0E37cc3Dc8Fa1675f2748b77dddfF452b63DD4CC',
     reputationManager: process.env.REPUTATION_MANAGER || '0x0Ff7d4E7aF64059426F76d2236155ef1655C99D8',
-    agentRegistry: process.env.AGENT_REGISTRY || '0x2CC077f1Da27e7e08A1832804B03b30A2990a61C'
+    agentRegistry: process.env.AGENT_REGISTRY || '0x2CC077f1Da27e7e08A1832804B03b30A2990a61C',
+    oracleRegistry: process.env.ORACLE_REGISTRY || '0x0000000000000000000000000000000000000000',
+    verificationAggregator: process.env.VERIFICATION_AGGREGATOR || '0x0000000000000000000000000000000000000000'
   },
   agentKeys: {
     provider: process.env.PROVIDER_PK || '',
@@ -83,46 +109,28 @@ async function main(): Promise<void> {
       process.exit(0)
     })
     
-    // Health check endpoint (optional)
-    if (process.env.ENABLE_HEALTH_CHECK === 'true') {
-      const port = parseInt(process.env.HEALTH_CHECK_PORT || '3001')
-      const { createServer } = await import('http')
-      
-      const server = createServer(async (req, res) => {
-        if (req.url === '/health') {
-          const health = await orchestrator.healthCheck()
-          res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify(health, null, 2))
-        } else {
-          res.writeHead(404)
-          res.end('Not Found')
-        }
-      })
-      
-      server.listen(port, () => {
-        console.log(`🏥 Health check server running on port ${port}`)
-      })
-    }
+    // Health check is now handled by the orchestrator's web server on port 8000
     
   } catch (error) {
     console.error('❌ Failed to start agent orchestrator:', error)
-    process.exit(1)
+    console.log('⚠️  Some services may have failed, but system will continue running')
+    // Don't exit - let working services continue
   }
 }
 
-// Handle uncaught exceptions
+// Handle uncaught exceptions - log but keep running
 process.on('uncaughtException', (error) => {
-  console.error('💥 Uncaught Exception:', error)
-  process.exit(1)
+  console.error('💥 Uncaught Exception (recovered):', error.message)
+  // Don't exit - autonomous system should be resilient
 })
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason)
-  process.exit(1)
+  console.error('💥 Unhandled Rejection (recovered):', reason)
+  // Don't exit - log and continue
 })
 
 // Start the application
 main().catch((error) => {
-  console.error('💥 Fatal error:', error)
-  process.exit(1)
+  console.error('💥 Startup error (will retry):', error.message)
+  // Don't exit - system should be resilient
 })

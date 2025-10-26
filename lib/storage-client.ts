@@ -1,4 +1,4 @@
-const STORAGE_API_URL = process.env.NEXT_PUBLIC_STORAGE_API_URL || 'http://localhost:8787'
+const STORAGE_API_URL = process.env.NEXT_PUBLIC_STORAGE_API_URL || 'https://skal.onrender.com'
 
 export interface EncryptUploadResponse {
   success: boolean

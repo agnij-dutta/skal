@@ -1,6 +1,11 @@
 import { EventEmitter } from 'events'
 import { ethers } from 'ethers'
 import { AgentOrchestrator, AgentConfig } from './AgentOrchestrator.js'
+import { AIDecisionEngine } from '../ai/AIDecisionEngine.js'
+import { MarketIntelligence } from '../ai/MarketIntelligence.js'
+import { RiskManager } from '../ai/RiskManager.js'
+import { StrategyExecutor } from '../ai/StrategyExecutor.js'
+import { PerformanceMonitor } from '../ai/PerformanceMonitor.js'
 
 export interface ServiceConfig {
   provider: ethers.JsonRpcProvider
@@ -16,12 +21,36 @@ export abstract class BaseService extends EventEmitter {
   protected lastActivity: Date | null = null
   protected errorCount = 0
   protected wallet: ethers.Wallet | null = null
+  
+  // AI Infrastructure
+  protected aiEngine!: AIDecisionEngine
+  protected marketIntelligence!: MarketIntelligence
+  protected riskManager!: RiskManager
+  protected strategyExecutor!: StrategyExecutor
+  protected performanceMonitor!: PerformanceMonitor
 
   constructor(serviceConfig: ServiceConfig) {
     super()
     this.provider = serviceConfig.provider
     this.config = serviceConfig.config
     this.orchestrator = serviceConfig.orchestrator
+  }
+
+  /**
+   * Set AI infrastructure for the service
+   */
+  setAIInfrastructure(ai: {
+    engine: AIDecisionEngine
+    intelligence: MarketIntelligence
+    risk: RiskManager
+    strategy: StrategyExecutor
+    performance: PerformanceMonitor
+  }): void {
+    this.aiEngine = ai.engine
+    this.marketIntelligence = ai.intelligence
+    this.riskManager = ai.risk
+    this.strategyExecutor = ai.strategy
+    this.performanceMonitor = ai.performance
   }
 
   abstract start(): Promise<void>

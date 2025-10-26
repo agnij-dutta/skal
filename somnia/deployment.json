@@ -3,7 +3,7 @@
     "name": "somniaTestnet",
     "chainId": "50312"
   },
-  "timestamp": "2025-10-13T17:16:08.229Z",
+  "timestamp": "2025-10-23T20:45:00.000Z",
   "deployer": "0xe87758C6CCcf3806C9f1f0C8F99f6Dcae36E5449",
   "contracts": {
     "CommitRegistry": "0x8D7cd1c2bEcA4eb4cE7aa0fA37eCB61ea125171f",
@@ -16,5 +16,8 @@
     "1": "ETH Price Prediction",
     "2": "DeFi Signals",
     "3": "NLP Embeddings"
-  }
+  },
+  "oracleRegistry": "0x7D13E10a328c00fb40da626eBF524bd0BFdF5350",
+  "verificationAggregator": "0xE949fa1A74D18E7888704B5e6E722b9a920AFE28",
+  "oracleDeployedAt": "2025-10-23T20:40:43.380Z"
 }

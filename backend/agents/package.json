@@ -6,27 +6,42 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p .",
-    "start": "tsx --env-file=.env src/index.ts",
-    "start:all": "tsx --env-file=.env src/index.ts",
-    "start:provider": "tsx --env-file=.env src/services/ProviderService.ts",
-    "start:buyer": "tsx --env-file=.env src/services/BuyerService.ts",
-    "start:verifier": "tsx --env-file=.env src/services/VerifierService.ts",
-    "start:lp": "tsx --env-file=.env src/services/LPService.ts",
-    "dev:provider": "tsx --env-file=.env src/providerAgent.ts",
-    "dev:buyer": "tsx --env-file=.env src/buyerAgent.ts",
-    "dev:verifier": "tsx --env-file=.env src/verifierAgent.ts",
-    "dev:lp": "tsx --env-file=.env src/lpAgent.ts"
+    "start": "tsx src/index.ts",
+    "start:all": "tsx src/index.ts",
+    "start:autonomous": "tsx src/index.ts",
+    "start:ai": "tsx src/microservices/ai-service.ts",
+    "start:agents": "tsx src/microservices/agent-service.ts",
+    "start:microservices": "concurrently \"npm run start:ai\" \"npm run start:agents\"",
+    "start:provider": "tsx src/services/ProviderService.ts",
+    "start:buyer": "tsx src/services/BuyerService.ts",
+    "start:verifier": "tsx src/services/VerifierService.ts",
+    "start:lp": "tsx src/services/LPService.ts",
+    "dev:provider": "tsx src/providerAgent.ts",
+    "dev:buyer": "tsx src/buyerAgent.ts",
+    "dev:verifier": "tsx src/verifierAgent.ts",
+    "dev:lp": "tsx src/lpAgent.ts",
+    "register:oracles": "tsx src/scripts/register-oracle.ts",
+    "start:oracle:1": "ORACLE_ID=1 tsx src/index.ts",
+    "start:oracle:2": "ORACLE_ID=2 tsx src/index.ts",
+    "start:oracle:3": "ORACLE_ID=3 tsx src/index.ts",
+    "start:multi-oracle": "concurrently \"npm run start:oracle:1\" \"npm run start:oracle:2\" \"npm run start:oracle:3\""
   },
   "dependencies": {
+    "@google/generative-ai": "^0.1.3",
+    "concurrently": "^8.2.2",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "ethers": "^6.15.0",
+    "express": "^4.21.2",
+    "mathjs": "^12.0.0",
     "node-fetch": "^3.3.2",
+    "simple-statistics": "^7.8.3",
     "tsx": "^4.19.1"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.23",
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0"
   }
 }
-
-
