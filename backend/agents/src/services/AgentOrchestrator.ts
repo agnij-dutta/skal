@@ -1,10 +1,12 @@
 import { EventEmitter } from 'events'
 import { ethers } from 'ethers'
 import dotenv from 'dotenv'
+import { createServer } from 'http'
 import { ProviderService } from './ProviderService.js'
 import { BuyerService } from './BuyerService.js'
 import { VerifierService } from './VerifierService.js'
 import { LPService } from './LPService.js'
+import { OracleNodeService } from './OracleNodeService.js'
 import { AIDecisionEngine } from '../ai/AIDecisionEngine.js'
 import { MarketIntelligence } from '../ai/MarketIntelligence.js'
 import { RiskManager } from '../ai/RiskManager.js'
@@ -22,6 +24,8 @@ export interface AgentConfig {
     ammEngine: string
     reputationManager: string
     agentRegistry: string
+    oracleRegistry: string
+    verificationAggregator: string
   }
   agentKeys: {
     provider: string
@@ -43,6 +47,7 @@ export class AgentOrchestrator extends EventEmitter {
   private services: Map<string, any> = new Map()
   private isRunning = false
   private config: AgentConfig
+  private webServer: any = null
   
   // AI Infrastructure
   private aiEngine!: AIDecisionEngine
@@ -79,10 +84,14 @@ export class AgentOrchestrator extends EventEmitter {
       // Start performance monitoring
       this.startPerformanceMonitoring()
       
+      // Start web server on port 8000
+      this.startWebServer()
+      
       // Setup graceful shutdown
       this.setupGracefulShutdown()
       
       console.log('✅ All agent services started successfully')
+      console.log('🌐 Web server running on http://localhost:8000')
       this.emit('started')
       
     } catch (error) {
@@ -102,6 +111,12 @@ export class AgentOrchestrator extends EventEmitter {
     this.isRunning = false
 
     try {
+      // Stop web server
+      if (this.webServer) {
+        this.webServer.close()
+        console.log('🌐 Web server stopped')
+      }
+      
       // Stop all services
       for (const [name, service] of this.services) {
         console.log(`Stopping ${name} service...`)
@@ -219,20 +234,53 @@ export class AgentOrchestrator extends EventEmitter {
     })
     this.services.set('lp', lpService)
 
+    // Always run Oracle nodes in autonomous mode
+    console.log('🔮 Initializing Oracle Network...')
+    
+    // Initialize multiple Oracle Node Services
+    const oracleCount = parseInt(process.env.MIN_ORACLES || '3')
+    for (let i = 1; i <= oracleCount; i++) {
+      const oracleId = i.toString()
+      const oracleService = new OracleNodeService({
+        provider: this.provider,
+        config: this.config,
+        orchestrator: this,
+        oracleId
+      })
+      oracleService.setAIInfrastructure({
+        engine: this.aiEngine,
+        intelligence: this.marketIntelligence,
+        risk: this.riskManager,
+        strategy: this.strategyExecutor,
+        performance: this.performanceMonitor
+      })
+      this.services.set(`oracle-${oracleId}`, oracleService)
+      console.log(`✅ Oracle Node ${oracleId} service initialized`)
+    }
+
     console.log('✅ All services initialized')
   }
 
   private async startServices(): Promise<void> {
-    console.log('🏃 Starting agent services...')
+    console.log('🏃 Starting agent services in parallel...')
 
-    for (const [name, service] of this.services) {
+    const startPromises = Array.from(this.services.entries()).map(async ([name, service]) => {
       console.log(`Starting ${name} service...`)
       if (service.start) {
-        await service.start()
+        try {
+          await service.start()
+          console.log(`✅ ${name} service started successfully`)
+        } catch (error) {
+          console.error(`❌ Failed to start ${name} service:`, error)
+          // Continue with other services even if one fails
+        }
       }
-    }
+    })
 
-    console.log('✅ All services started')
+    // Start all services in parallel
+    await Promise.allSettled(startPromises)
+
+    console.log('✅ All services started (some may have failed)')
   }
 
   private startPerformanceMonitoring(): void {
@@ -240,6 +288,55 @@ export class AgentOrchestrator extends EventEmitter {
       this.performanceMonitor.start()
       console.log('📊 Performance monitoring started')
     }
+  }
+
+  private startWebServer(): void {
+    const port = 8000
+    
+    this.webServer = createServer(async (req, res) => {
+      // Enable CORS
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+      
+      if (req.method === 'OPTIONS') {
+        res.writeHead(200)
+        res.end()
+        return
+      }
+
+      try {
+        if (req.url === '/health' || req.url === '/') {
+          const health = await this.healthCheck()
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(health, null, 2))
+        } else if (req.url === '/status') {
+          const status = {
+            running: this.isRunning,
+            services: Array.from(this.services.keys()),
+            timestamp: new Date().toISOString()
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(status, null, 2))
+        } else if (req.url === '/oracles') {
+          const oracleStatus = await this.getOracleStatus()
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(oracleStatus, null, 2))
+        } else {
+          res.writeHead(404, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: 'Not Found' }, null, 2))
+        }
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Internal Server Error' }, null, 2))
+      }
+    })
+    
+    this.webServer.listen(port, () => {
+      console.log(`🌐 Autonomous Agent Network running on http://localhost:${port}`)
+      console.log(`📊 Health check: http://localhost:${port}/health`)
+      console.log(`🔮 Oracle status: http://localhost:${port}/oracles`)
+    })
   }
 
   private setupGracefulShutdown(): void {
@@ -293,5 +390,33 @@ export class AgentOrchestrator extends EventEmitter {
   // Event forwarding
   forwardEvent(eventName: string, data: any): void {
     this.emit(eventName, data)
+  }
+
+  // Get oracle status
+  async getOracleStatus(): Promise<{ oracles: any[]; total: number; active: number }> {
+    const oracles: any[] = []
+    let activeCount = 0
+    
+    for (const [name, service] of this.services) {
+      if (name.startsWith('oracle-')) {
+        const oracleId = name.replace('oracle-', '')
+        const isRunning = this.isServiceRunning(name)
+        if (isRunning) activeCount++
+        
+        oracles.push({
+          id: oracleId,
+          name: `Oracle ${oracleId}`,
+          running: isRunning,
+          lastActivity: service.lastActivity || null,
+          errorCount: service.errorCount || 0
+        })
+      }
+    }
+    
+    return {
+      oracles,
+      total: oracles.length,
+      active: activeCount
+    }
   }
 }

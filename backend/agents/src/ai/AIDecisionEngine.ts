@@ -274,11 +274,25 @@ export class AIDecisionEngine {
    */
   async generateWithGemini(prompt: string): Promise<string> {
     try {
+      // Rate limiting: wait if called too recently
+      const now = Date.now()
+      const timeSinceLastCall = now - (this as any).lastGeminiCall || 0
+      if (timeSinceLastCall < 2000) { // 2 second cooldown
+        await new Promise(resolve => setTimeout(resolve, 2000 - timeSinceLastCall))
+      }
+      (this as any).lastGeminiCall = Date.now()
+
       const model = this.geminiClient.getGenerativeModel({ model: 'gemini-2.0-flash' })
       const result = await model.generateContent(prompt)
       const response = await result.response
       return response.text()
-    } catch (error) {
+    } catch (error: any) {
+      // Check if it's a quota exceeded error
+      if (error.message?.includes('Quota exceeded') || error.message?.includes('429')) {
+        console.warn('⚠️ Gemini API quota exceeded, using fallback for 60 seconds...')
+        // Wait 60 seconds before retrying
+        await new Promise(resolve => setTimeout(resolve, 60000))
+      }
       console.error('Gemini API error, using fallback:', error)
       // Fallback to local generation
       return this.generateFallbackResponse(prompt)

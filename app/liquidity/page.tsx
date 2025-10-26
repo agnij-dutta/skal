@@ -300,6 +300,12 @@ function LiquidityContent() {
       return
     }
 
+    // Validate that both amounts are greater than 0
+    if (parseFloat(addLiquidity.amountA) <= 0 || parseFloat(addLiquidity.amountB) <= 0) {
+      toast.error('Both amounts must be greater than 0')
+      return
+    }
+
     if (!address) {
       toast.error('Please connect your wallet first')
       return

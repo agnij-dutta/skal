@@ -184,7 +184,7 @@ export class BuyerService extends BaseService {
       
       if (shouldBuy) {
         this.logActivity(`AI Decision: BUY task ${taskId} | Confidence: ${decision.confidence} | Risk: ${risk.score} | Amount: ${ethers.formatEther(buyAmount)}`)
-        await this.buyTask(taskId, ethers.formatEther(buyAmount))
+        await this.buyTask(taskId, ethers.formatEther(buyAmount), provider)
         
         // Track decision for learning
         await this.trackDecision('task_purchase', taskData, decision)
@@ -197,7 +197,7 @@ export class BuyerService extends BaseService {
     }
   }
 
-  private async buyTask(taskId: number, amount: string): Promise<void> {
+  private async buyTask(taskId: number, amount: string, provider: string): Promise<void> {
     if (!this.wallet) {
       this.logError(new Error('Wallet not initialized'), 'Cannot buy task')
       return
@@ -225,10 +225,77 @@ export class BuyerService extends BaseService {
           amount: ethers.parseEther(amount),
           txHash: tx.hash
         })
+        
+        // Automatically decrypt and access the purchased task data
+        await this.decryptAndAccessTaskData(taskId, provider)
       }
       
     } catch (error) {
       this.logError(error as Error, `Failed to buy task ${taskId}`)
+    }
+  }
+
+  private async decryptAndAccessTaskData(taskId: number, provider: string): Promise<void> {
+    try {
+      // Get task details to find the CID
+      const task = await this.commitRegistry.getTask(taskId)
+      if (!task || !task.cid) {
+        this.logActivity(`Task ${taskId} not found or no CID available`)
+        return
+      }
+
+      // Use the same decryption system as the dApp
+      const { decryptData } = await import('../../../../lib/storage-client')
+      const { generateDeterministicKey, generateDeterministicNonce } = await import('../../../../lib/crypto-utils')
+      
+      // Generate the same key and nonce as the provider used for encryption
+      const tempTaskId = 0 // Same as provider encryption logic
+      const key = await generateDeterministicKey(provider, tempTaskId)
+      const nonce = await generateDeterministicNonce(provider, tempTaskId)
+      
+      this.logActivity(`Decrypting task ${taskId} data with key: ${key.slice(0, 16)}...`)
+      
+      const result = await decryptData(task.cid, key, nonce)
+      
+      if (result.success && result.data) {
+        this.logActivity(`Successfully decrypted task ${taskId} data`)
+        this.logActivity(`Task data: ${JSON.stringify(result.data, null, 2)}`)
+        
+        // Store the decrypted data for AI analysis or further processing
+        await this.processDecryptedTaskData(taskId, result.data)
+      } else {
+        this.logActivity(`Failed to decrypt task ${taskId} data: ${result.message}`)
+      }
+      
+    } catch (error) {
+      this.logError(error as Error, `Failed to decrypt task ${taskId} data`)
+    }
+  }
+
+  private async processDecryptedTaskData(taskId: number, data: any): Promise<void> {
+    try {
+      // Process the decrypted trading signal data
+      this.logActivity(`Processing decrypted data for task ${taskId}:`)
+      this.logActivity(`Signal type: ${data.prediction ? 'Price Prediction' : data.signal ? 'Trading Signal' : 'Unknown'}`)
+      
+      if (data.prediction) {
+        this.logActivity(`Prediction: ${data.prediction}`)
+        this.logActivity(`Confidence: ${data.confidence}`)
+        this.logActivity(`Reasoning: ${data.reasoning}`)
+      }
+      
+      if (data.signal) {
+        this.logActivity(`Signal: ${data.signal}`)
+        this.logActivity(`Asset: ${data.asset}`)
+        this.logActivity(`Price: ${data.price}`)
+        this.logActivity(`Confidence: ${data.confidence}`)
+      }
+      
+      // Here you could add AI analysis of the decrypted signal
+      // For example, validate the signal quality, extract insights, etc.
+      
+    } catch (error) {
+      this.logError(error as Error, `Failed to process decrypted data for task ${taskId}`)
     }
   }
 

@@ -5,6 +5,17 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
+// Interface for EscrowManager integration
+interface IEscrowManager {
+    function releaseFunds(
+        uint256 taskId,
+        address provider,
+        uint8 validationScore
+    ) external;
+    
+    function refundFunds(uint256 taskId) external;
+}
+
 /**
  * @title CommitRegistry
  * @dev Manages commit-reveal cycles for AI intelligence trading
@@ -90,6 +101,7 @@ contract CommitRegistry is ReentrancyGuard, Ownable {
     address public escrowManager;
     address public reputationManager;
     address public agentRegistry;
+    address public verificationAggregator;
 
     // Modifiers
     modifier onlyEscrowManager() {
@@ -99,7 +111,12 @@ contract CommitRegistry is ReentrancyGuard, Ownable {
 
     modifier onlyRegisteredAgent() {
         require(agentRegistry != address(0), "AgentRegistry not set");
-        // TODO: Add agent verification logic
+        // Allow verificationAggregator to bypass agent check
+        if (msg.sender == verificationAggregator) {
+            _;
+            return;
+        }
+        // TODO: Add agent verification logic for direct submissions
         _;
     }
 
@@ -121,6 +138,14 @@ contract CommitRegistry is ReentrancyGuard, Ownable {
         escrowManager = _escrowManager;
         reputationManager = _reputationManager;
         agentRegistry = _agentRegistry;
+    }
+
+    /**
+     * @dev Set verification aggregator address
+     */
+    function setVerificationAggregator(address _aggregator) external onlyOwner {
+        require(_aggregator != address(0), "Invalid aggregator");
+        verificationAggregator = _aggregator;
     }
 
     /**
@@ -214,7 +239,7 @@ contract CommitRegistry is ReentrancyGuard, Ownable {
         // Trigger settlement in EscrowManager
         if (escrowManager != address(0)) {
             // Call EscrowManager to release funds based on validation
-            // This will be implemented in EscrowManager contract
+            IEscrowManager(escrowManager).releaseFunds(taskId, task.provider, score);
         }
     }
 

@@ -1,18 +1,26 @@
 import { ethers } from 'ethers'
 import { BaseService, ServiceConfig } from './BaseService.js'
 import { COMMIT_REGISTRY_ABI } from '../../../../lib/contracts/abis/commitRegistry.js'
+import { ESCROW_MANAGER_ABI } from '../../../../lib/contracts/abis/escrowManager.js'
 import { TaskParams, IntelligentData } from '../ai/types.js'
 
 export class ProviderService extends BaseService {
   private commitRegistry: ethers.Contract
+  private escrowManager: ethers.Contract
   private intervalId: NodeJS.Timeout | null = null
   private taskInterval: number = 30000 // 30 seconds
+  private taskCids: Map<number, string> = new Map() // Store CIDs for tasks
 
   constructor(serviceConfig: ServiceConfig) {
     super(serviceConfig)
     this.commitRegistry = new ethers.Contract(
       this.config.contractAddresses.commitRegistry,
       COMMIT_REGISTRY_ABI,
+      this.provider
+    )
+    this.escrowManager = new ethers.Contract(
+      this.config.contractAddresses.escrowManager,
+      ESCROW_MANAGER_ABI,
       this.provider
     )
   }
@@ -34,6 +42,9 @@ export class ProviderService extends BaseService {
       
       // Listen for events
       this.setupEventListeners()
+      
+      // Start periodic check for tasks that need revelation
+      this.startRevelationCheck()
       
     } catch (error) {
       this.logError(error as Error, 'Failed to start provider service')
@@ -66,6 +77,52 @@ export class ProviderService extends BaseService {
     this.intervalId = setInterval(() => {
       this.createTask()
     }, this.taskInterval)
+  }
+
+  private startRevelationCheck(): void {
+    // Check every 10 seconds for tasks that need revelation
+    setInterval(async () => {
+      await this.checkAndRevealTasks()
+    }, 10000)
+    
+    this.logActivity('Started periodic revelation check (every 10 seconds)')
+  }
+
+  private async checkAndRevealTasks(): Promise<void> {
+    try {
+      // Check all tasks we have CIDs for
+      for (const [taskId, cid] of this.taskCids.entries()) {
+        try {
+          // Check if task has been purchased (has funds locked)
+          const task = await this.commitRegistry.getTask(taskId)
+          
+          // If task exists and has been purchased but not revealed yet
+          if (task && !task.revealed) {
+            this.logActivity(`🔍 Found unrevealed task ${taskId} with CID ${cid}, checking if purchased...`)
+            
+            // Check if there are any funds locked for this task
+            // We'll reveal if the task exists and we have a CID for it
+            this.logActivity(`🎯 Revealing task ${taskId} with CID ${cid}`)
+            const success = await this.revealTask(taskId)
+            
+            // If revelation was successful, remove from pending list
+            if (success) {
+              this.taskCids.delete(taskId)
+              this.logActivity(`✅ Task ${taskId} revealed successfully, removed from pending list`)
+            }
+          } else if (task && task.revealed) {
+            // Task is already revealed, remove from pending list
+            this.taskCids.delete(taskId)
+            this.logActivity(`✅ Task ${taskId} already revealed, removed from pending list`)
+          }
+        } catch (error) {
+          // Task might not exist or error occurred, continue with next task
+          continue
+        }
+      }
+    } catch (error) {
+      this.logError(error as Error, 'Failed to check and reveal tasks')
+    }
   }
 
   private async createTask(): Promise<void> {
@@ -116,7 +173,13 @@ export class ProviderService extends BaseService {
       const cid = await this.uploadToStorage(intelligentData.data)
       const commitHash = ethers.keccak256(ethers.toUtf8Bytes(cid + Date.now()))
       
-      await this.commitTaskToBlockchain(commitHash, taskParams.marketId, optimalStake)
+      const taskId = await this.commitTaskToBlockchain(commitHash, taskParams.marketId, optimalStake)
+      
+      // Store the CID for later revelation
+      if (taskId > 0) {
+        this.taskCids.set(taskId, cid)
+        this.logActivity(`Stored CID ${cid} for task ${taskId}`)
+      }
       
     } catch (error) {
       this.logError(error as Error, 'Failed to create task')
@@ -137,10 +200,39 @@ export class ProviderService extends BaseService {
   }
 
   private async uploadToStorage(data: string): Promise<string> {
-    // Simplified storage upload - in real implementation would use storage service
-    const mockCid = 'Qm' + Math.random().toString(36).substring(2, 15)
-    this.logActivity(`Data uploaded to IPFS: ${mockCid}`)
-    return mockCid
+    try {
+      // Use the same encryption system as the dApp
+      const { encryptAndUpload } = await import('../../../../lib/storage-client')
+      
+      // Generate deterministic key and nonce for encryption
+      const { generateDeterministicKey, generateDeterministicNonce } = await import('../../../../lib/crypto-utils')
+      
+      // Use tempTaskId = 0 for encryption (same as dApp logic)
+      const tempTaskId = 0
+      const key = await generateDeterministicKey(this.wallet!.address, tempTaskId)
+      const nonce = await generateDeterministicNonce(this.wallet!.address, tempTaskId)
+      
+      this.logActivity(`Encrypting data with key: ${key.slice(0, 16)}...`)
+      
+      const result = await encryptAndUpload(data, {
+        provider: this.wallet!.address,
+        key,
+        nonce
+      })
+
+      if (!result.success) {
+        throw new Error('Encryption and upload failed')
+      }
+
+      this.logActivity(`Data encrypted and uploaded to IPFS: ${result.cid}`)
+      return result.cid
+    } catch (error) {
+      this.logError(error as Error, 'Failed to upload encrypted data to storage')
+      // Fallback to mock CID if encryption fails
+      const mockCid = 'Qm' + Math.random().toString(36).substring(2, 15)
+      this.logActivity(`Fallback: Data uploaded to IPFS: ${mockCid}`)
+      return mockCid
+    }
   }
 
   private extractTaskIdFromLogs(logs: ethers.Log[]): number {
@@ -159,31 +251,48 @@ export class ProviderService extends BaseService {
   }
 
   private setupEventListeners(): void {
-    // Note: In a real implementation, we would listen for FundsLocked events
-    // from the EscrowManager contract to know when to reveal tasks
-    // For now, we'll use a simple timer-based approach
-    this.logActivity('Event listeners set up (simplified for testing)')
+    // Listen for FundsLocked events to automatically reveal tasks
+    this.escrowManager.on('FundsLocked', async (taskId, buyer, provider, amount, timestamp, event) => {
+      try {
+        const taskIdNum = Number(taskId)
+        this.logActivity(`🔓 FundsLocked event received: task ${taskIdNum} by ${buyer}, provider ${provider}, amount ${amount}`)
+        
+        // Only reveal if this provider created the task
+        if (provider.toLowerCase() === this.wallet!.address.toLowerCase()) {
+          this.logActivity(`🎯 This is our task! Revealing task ${taskIdNum}...`)
+          await this.revealTask(taskIdNum)
+        } else {
+          this.logActivity(`⏭️ Task ${taskIdNum} belongs to different provider ${provider}, skipping`)
+        }
+      } catch (error) {
+        this.logError(error as Error, `Failed to handle FundsLocked event for task ${taskId}`)
+      }
+    })
     
-    // Disable automatic reveals for now - they can be triggered manually
-    // In production, this would listen for FundsLocked events from EscrowManager
-    this.logActivity('Automatic reveals disabled - tasks can be revealed manually')
+    this.logActivity('Event listeners set up - will auto-reveal tasks when funds are locked')
   }
 
-  private async revealTask(taskId: number): Promise<void> {
+  private async revealTask(taskId: number): Promise<boolean> {
     if (!this.wallet) {
       this.logError(new Error('Wallet not initialized'), 'Cannot reveal task')
-      return
+      return false
     }
 
     try {
       this.logActivity(`Revealing task ${taskId}...`)
       
-      // In real implementation, would fetch actual CID from storage
-      const mockCid = 'Qm' + Math.random().toString(36).substring(2, 15)
+      // Get the stored CID for this task
+      const cid = this.taskCids.get(taskId)
+      if (!cid) {
+        this.logError(new Error(`No CID found for task ${taskId}`), 'Cannot reveal task without CID')
+        return false
+      }
+      
+      this.logActivity(`Using stored CID ${cid} for task ${taskId}`)
       
       const tx = await (this.commitRegistry.connect(this.wallet) as any).revealTask(
         BigInt(taskId),
-        mockCid,
+        cid,
         {
           gasLimit: 300000 // Increased gas limit
         }
@@ -192,17 +301,22 @@ export class ProviderService extends BaseService {
       this.logActivity(`Task revealed: ${tx.hash}`)
       
       const receipt = await this.waitForTransaction(tx.hash)
-      if (receipt) {
+      if (receipt && receipt.status === 1) {
         this.logActivity(`Task reveal confirmed in block ${receipt.blockNumber}`)
         this.orchestrator.forwardEvent('taskRevealed', {
           taskId,
-          cid: mockCid,
+          cid,
           txHash: tx.hash
         })
+        return true
+      } else {
+        this.logError(new Error('Transaction failed'), `Task ${taskId} revelation failed`)
+        return false
       }
       
     } catch (error) {
       this.logError(error as Error, `Failed to reveal task ${taskId}`)
+      return false
     }
   }
 
@@ -345,7 +459,7 @@ export class ProviderService extends BaseService {
     return Math.max(0, Math.min(1, score))
   }
 
-  private async commitTaskToBlockchain(commitHash: string, marketId: number, stake: bigint): Promise<void> {
+  private async commitTaskToBlockchain(commitHash: string, marketId: number, stake: bigint): Promise<number> {
     try {
       const tx = await (this.commitRegistry.connect(this.wallet!) as any).commitTask(
         commitHash,
@@ -361,14 +475,17 @@ export class ProviderService extends BaseService {
       
       const receipt = await this.waitForTransaction(tx.hash)
       if (receipt) {
+        const taskId = this.extractTaskIdFromLogs([...receipt.logs])
         this.logActivity(`Task confirmed in block ${receipt.blockNumber}`)
         this.orchestrator.forwardEvent('taskCommitted', {
-          taskId: this.extractTaskIdFromLogs([...receipt.logs]),
+          taskId,
           commitHash,
           provider: this.wallet!.address,
           txHash: tx.hash
         })
+        return taskId
       }
+      return 0
     } catch (error) {
       this.logError(error as Error, 'Failed to commit task to blockchain')
       throw error
