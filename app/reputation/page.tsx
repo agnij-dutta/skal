@@ -56,7 +56,7 @@ const mockProviders: Provider[] = [
     reputation: 950,
     commits: 145,
     successRate: 98.2,
-    totalEarnings: '12.5 STT',
+    totalEarnings: '12.5 FLOW',
     joinDate: '2024-01-15',
     category: 'DeFi',
     recentActivity: [
@@ -76,7 +76,7 @@ const mockProviders: Provider[] = [
     reputation: 920,
     commits: 98,
     successRate: 96.8,
-    totalEarnings: '8.7 STT',
+    totalEarnings: '8.7 FLOW',
     joinDate: '2024-02-01',
     category: 'NLP',
     recentActivity: [
@@ -96,7 +96,7 @@ const mockProviders: Provider[] = [
     reputation: 890,
     commits: 67,
     successRate: 94.5,
-    totalEarnings: '6.2 STT',
+    totalEarnings: '6.2 FLOW',
     joinDate: '2024-02-15',
     category: 'Trading',
     recentActivity: [
@@ -148,7 +148,7 @@ export default function ReputationPage() {
       reputation: 0, // Would need to fetch from ReputationManager
       commits: 0, // Would need to fetch from CommitRegistry
       successRate: 0, // Would need to calculate from verification data
-      totalEarnings: '0 STT', // Would need to fetch from EscrowManager
+      totalEarnings: '0 FLOW', // Would need to fetch from EscrowManager
       joinDate: new Date().toISOString().split('T')[0], // Would need to fetch from AgentRegistry
       category: 'DeFi', // Would need to fetch from agent metadata
       recentActivity: [], // Would need to fetch from events

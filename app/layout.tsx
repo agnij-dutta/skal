@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Shadow Protocol - AI Intelligence Marketplace",
-  description: "Privacy-preserving marketplace for trading AI outputs on Somnia blockchain",
+  title: "Skal - AI Intelligence Marketplace",
+  description: "Privacy-preserving marketplace for trading AI outputs on Flow blockchain",
   generator: "v0.app",
 }
 

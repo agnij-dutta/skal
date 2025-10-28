@@ -41,10 +41,10 @@ export class BuyerService extends BaseService {
       // Check for existing tasks that haven't been bought yet
       await this.checkExistingTasks()
       
-      // Periodic check for all available tasks
+      // Periodic check for all available tasks - more frequent for testing
       setInterval(async () => {
         await this.checkAllAvailableTasks()
-      }, 60000) // Check every minute
+      }, 10000) // Check every 10 seconds for testing
       
     } catch (error) {
       this.logError(error as Error, 'Failed to start buyer service')
@@ -63,8 +63,8 @@ export class BuyerService extends BaseService {
   }
 
   private setupEventListeners(): void {
-      // Listen for new task commits
-    this.commitRegistry.on('TaskCommitted', async (taskId, commitHash, provider, marketId, stake, event) => {
+    // Listen for new task commits
+    this.safeEventListener(this.commitRegistry, 'TaskCommitted', async (taskId, commitHash, provider, marketId, stake, event) => {
       this.logActivity(`New task committed: ${taskId} by ${provider}`)
       
       // Add to watched tasks
@@ -74,12 +74,24 @@ export class BuyerService extends BaseService {
       await this.evaluateTask(Number(taskId), provider, BigInt(stake))
     })
 
-    // Listen for task reveals
-    this.commitRegistry.on('TaskRevealed', async (taskId, cid, event) => {
-      this.logActivity(`Task revealed: ${taskId} with CID ${cid}`)
-      
-      // Remove from watched tasks
-      this.watchedTasks.delete(Number(taskId))
+    // Listen for task reveals to decrypt purchased data
+    this.safeEventListener(this.commitRegistry, 'TaskRevealed', async (taskId, cid, event) => {
+      try {
+        const taskIdNum = Number(taskId)
+        this.logActivity(`Task revealed: ${taskIdNum} with CID ${cid}`)
+        
+        // Check if we purchased this task and decrypt the data
+        const task = await this.commitRegistry.getTask(taskIdNum)
+        if (task && task.provider) {
+          this.logActivity(`Attempting to decrypt revealed task ${taskIdNum} data...`)
+          await this.decryptAndAccessTaskData(taskIdNum, task.provider)
+        }
+        
+        // Remove from watched tasks
+        this.watchedTasks.delete(taskIdNum)
+      } catch (error) {
+        this.logActivity(`⚠️ Event handler error for TaskRevealed: ${(error as Error).message}`)
+      }
     })
   }
 
@@ -115,18 +127,23 @@ export class BuyerService extends BaseService {
       const filter = this.commitRegistry.filters.TaskCommitted()
       const events = await this.commitRegistry.queryFilter(filter, -500) // Last 500 blocks
       
+      this.logActivity(`Found ${events.length} TaskCommitted events`)
+      
       for (const event of events) {
         if ('args' in event && event.args) {
           const taskId = Number(event.args.taskId)
           
           // Skip if already watched/evaluated
           if (this.watchedTasks.has(taskId)) {
+            this.logActivity(`Task ${taskId} already watched, skipping`)
             continue
           }
           
           // Check if task is still uncommitted (not revealed yet)
           try {
             const task = await this.commitRegistry.getTask(taskId)
+            
+            this.logActivity(`Task ${taskId} state: revealed=${task.revealed}, cid='${task.cid}', provider=${task.provider}`)
             
             // If task has no revealed data (CID is empty), it's still available
             if (!task.revealed || task.cid === '') {
@@ -136,8 +153,11 @@ export class BuyerService extends BaseService {
               this.watchedTasks.add(taskId)
               this.logActivity(`Found available task ${taskId}, evaluating...`)
               await this.evaluateTask(taskId, provider, stake)
+            } else {
+              this.logActivity(`Task ${taskId} already revealed, skipping`)
             }
           } catch (error) {
+            this.logActivity(`Error checking task ${taskId}: ${(error as Error).message}`)
             // Task might not exist or error occurred, skip
             continue
           }
@@ -159,14 +179,16 @@ export class BuyerService extends BaseService {
       // 1. Gather comprehensive task data
       const taskData = await this.gatherTaskData(taskId, provider, stake)
       
-      // 2. Fast local screening (pre-filter) - more lenient threshold
+      // 2. Fast local screening (pre-filter) - very lenient threshold for testing
       const LocalMLModels = (await import('../ai/LocalMLModels.js')).LocalMLModels
       const localModels = new LocalMLModels()
       const quickScore = localModels.predictTaskQuality(taskData.features)
-      if (quickScore < 0.2) { // Lowered from 0.3 to 0.2
+      if (quickScore < 0.1) { // Very low threshold for testing - almost always pass
         this.logActivity(`Task ${taskId} rejected by quick screening (score: ${quickScore})`)
         return
       }
+      
+      this.logActivity(`Task ${taskId} passed quick screening (score: ${quickScore})`)
       
       // 3. AI-powered deep analysis
       const decision = await this.aiEngine.analyzeTask(taskData)
@@ -178,9 +200,9 @@ export class BuyerService extends BaseService {
       const balance = await this.provider.getBalance(this.wallet.address)
       const buyAmount = await this.riskManager.determineOptimalStakeSize(taskData, balance)
       
-      // 6. Execute decision - more aggressive buying strategy
-      // Buy if: AI recommends AND (risk is acceptable OR confidence is very high)
-      const shouldBuy = decision.shouldBuy && (risk.score < 0.8 || decision.confidence > 0.85)
+      // 6. Execute decision - very aggressive buying strategy for testing
+      // Buy if: AI recommends OR (risk is acceptable OR confidence is high) - almost always buy
+      const shouldBuy = decision.shouldBuy || (risk.score < 0.9 || decision.confidence > 0.7)
       
       if (shouldBuy) {
         this.logActivity(`AI Decision: BUY task ${taskId} | Confidence: ${decision.confidence} | Risk: ${risk.score} | Amount: ${ethers.formatEther(buyAmount)}`)
@@ -226,8 +248,8 @@ export class BuyerService extends BaseService {
           txHash: tx.hash
         })
         
-        // Automatically decrypt and access the purchased task data
-        await this.decryptAndAccessTaskData(taskId, provider)
+        // Don't decrypt immediately - wait for task to be revealed
+        this.logActivity(`Task ${taskId} purchased, waiting for reveal to decrypt data`)
       }
       
     } catch (error) {

@@ -1,5 +1,5 @@
 import { useReadContract, useReadContracts, useWatchContractEvent } from 'wagmi'
-import { CONTRACT_ADDRESSES } from '../../somnia-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '../../flow-config'
 import { useState, useEffect } from 'react'
 
 // Oracle Registry ABI
@@ -346,6 +346,7 @@ export function useOracleStatus(taskId: number | undefined) {
     oracleCount: oracleCount.count,
   }
 }
+
 
 
 

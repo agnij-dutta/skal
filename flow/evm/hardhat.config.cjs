@@ -17,14 +17,9 @@ const config = {
     hardhat: {
       chainId: 1337,
     },
-    somniaTestnet: {
-      url: "https://dream-rpc.somnia.network/",
-      chainId: 50312, // Testnet chain ID from the network table
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-    },
-    somniaMainnet: {
-      url: "https://rpc.somnia.network",
-      chainId: 0x1a1a1b, // 1703937 in decimal
+    flowEvmTestnet: {
+      url: "https://testnet.evm.nodes.onflow.org",
+      chainId: 545,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
   },

@@ -29,7 +29,7 @@ async function registerOracle(
   
   try {
     // Setup provider and wallet
-    const rpcUrl = process.env.SOMNIA_RPC || 'https://dream-rpc.somnia.network/'
+    const rpcUrl = process.env.FLOW_RPC || 'https://testnet.evm.nodes.onflow.org'
     const provider = new ethers.JsonRpcProvider(rpcUrl)
     const wallet = new ethers.Wallet(privateKey, provider)
     
@@ -189,6 +189,7 @@ main().catch(error => {
   console.error('Fatal error:', error)
   process.exit(1)
 })
+
 
 
 

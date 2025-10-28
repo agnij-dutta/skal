@@ -6,10 +6,8 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "test:coverage": "hardhat coverage",
-    "deploy:testnet": "hardhat run scripts/deploy.ts --network somniaTestnet",
-    "deploy:mainnet": "hardhat run scripts/deploy.ts --network somniaMainnet",
-    "verify:testnet": "hardhat verify --network somniaTestnet",
-    "verify:mainnet": "hardhat verify --network somniaMainnet",
+    "deploy:flow-evm": "hardhat run scripts/deploy-flow.js --network flowEvmTestnet",
+    "verify:flow-evm": "hardhat verify --network flowEvmTestnet",
     "typechain": "typechain --target ethers-v6 --out-dir typechain-types 'artifacts/contracts/**/*.json'",
     "clean": "hardhat clean"
   },

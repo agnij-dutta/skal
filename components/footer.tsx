@@ -10,7 +10,7 @@ export function Footer() {
             <Logo className="w-[120px]" />
           </Link>
           <p className="font-mono text-sm text-foreground/60 mt-4 text-pretty max-w-md">
-            Shadow Protocol by Skal — a privacy-preserving intelligence exchange: commit–reveal, AMM price discovery,
+            Skal — a privacy-preserving intelligence exchange: commit–reveal, AMM price discovery,
             verifier oracles, and onchain reputation.
           </p>
         </div>

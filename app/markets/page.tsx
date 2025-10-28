@@ -102,9 +102,9 @@ export default function MarketsPage() {
           name: metadata.name,
           description: metadata.description,
           category: metadata.category,
-          liquidity: '0 STT',
-          volume24h: '0 STT',
-          price: '0 STT',
+          liquidity: '0 FLOW',
+          volume24h: '0 FLOW',
+          price: '0 FLOW',
           change24h: 0,
           providers: 0,
           commits: 0,
@@ -120,9 +120,9 @@ export default function MarketsPage() {
           name: metadata.name,
           description: metadata.description,
           category: metadata.category,
-          liquidity: '0 STT',
-          volume24h: '0 STT',
-          price: '0 STT',
+          liquidity: '0 FLOW',
+          volume24h: '0 FLOW',
+          price: '0 FLOW',
           change24h: 0,
           providers: 0,
           commits: 0,
@@ -135,7 +135,7 @@ export default function MarketsPage() {
       const reserveB = contract.market.reserveB
       const totalSupply = contract.market.totalSupply
 
-      // Calculate liquidity (reserveA + reserveB in STT)
+      // Calculate liquidity (reserveA + reserveB in FLOW)
       const liquidity = formatEther(reserveA + reserveB)
       
       // Calculate price (reserveA / reserveB)
@@ -152,9 +152,9 @@ export default function MarketsPage() {
         name: metadata.name,
         description: metadata.description,
         category: metadata.category,
-        liquidity: `${liquidity} STT`,
-        volume24h: '0 STT', // Would need historical data
-        price: `${price} STT`,
+        liquidity: `${liquidity} FLOW`,
+        volume24h: '0 FLOW', // Would need historical data
+        price: `${price} FLOW`,
         change24h: 0, // Would need historical data
         providers: providerCount,
         commits,
@@ -175,7 +175,7 @@ export default function MarketsPage() {
 
   // Calculate totals
   const totalLiquidity = markets.reduce((sum, market) => {
-    const liquidity = parseFloat(market.liquidity.replace(' STT', ''))
+    const liquidity = parseFloat(market.liquidity.replace(' FLOW', ''))
     return sum + liquidity
   }, 0)
 
@@ -212,7 +212,7 @@ export default function MarketsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-white">
-              {totalLiquidity.toFixed(2)} STT
+              {totalLiquidity.toFixed(2)} FLOW
             </div>
             <p className="text-xs text-white/70">Across all markets</p>
           </CardContent>

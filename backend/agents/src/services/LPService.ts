@@ -29,8 +29,8 @@ export class LPService extends BaseService {
       
       this.logActivity('LP service started - ready for autonomous operation')
       
-      // Skip initial liquidity - will be provided on demand from dapp or when needed
-      // await this.provideInitialLiquidity()
+      // Seed initial liquidity if a market is empty
+      await this.seedLiquidityIfNeeded()
       
       // Start rebalancing process (will check if liquidity exists before acting)
       this.startRebalancing()
@@ -59,7 +59,7 @@ export class LPService extends BaseService {
     this.logActivity('LP service stopped')
   }
 
-  private async provideInitialLiquidity(): Promise<void> {
+  private async provideInitialLiquidity(marketIdOverride?: number): Promise<void> {
     if (!this.wallet) {
       this.logError(new Error('Wallet not initialized'), 'Cannot provide liquidity')
       return
@@ -68,7 +68,7 @@ export class LPService extends BaseService {
     try {
       this.logActivity('Providing initial liquidity...')
       
-      const marketId = this.config.marketConfig.marketId
+      const marketId = marketIdOverride || this.config.marketConfig.marketId
       const amountA = ethers.parseEther(this.config.marketConfig.lpAmountA)
       const amountB = BigInt(this.config.marketConfig.lpAmountB)
       
@@ -78,7 +78,7 @@ export class LPService extends BaseService {
         amountB,
         {
           gasLimit: 500000, // Increased gas limit for AMM operations
-          value: amountA // Send ETH as amountA
+          value: amountA + amountB // Native-only pool: send both as value
         }
       )
 
@@ -124,7 +124,10 @@ export class LPService extends BaseService {
         allMarkets.map(id => this.marketIntelligence.analyzeMarketConditions(id))
       )
       
-      // 2. AI determines optimal liquidity distribution
+      // 2. Auto-seed any empty markets before rebalancing
+      await this.seedLiquidityIfNeeded()
+
+      // 3. AI determines optimal liquidity distribution
       const strategy = await this.aiEngine.selectStrategy({
         markets: marketAnalyses,
         currentPositions: await this.getCurrentPositions(),
@@ -135,7 +138,7 @@ export class LPService extends BaseService {
         liquidity: marketAnalyses.reduce((sum, m) => sum + (m.liquidity || 0), 0)
       })
       
-      // 3. Execute strategy
+      // 4. Execute strategy
       for (const action of strategy.actions) {
         switch (action.type) {
           case 'add':
@@ -150,7 +153,7 @@ export class LPService extends BaseService {
         }
       }
       
-      // 4. Dynamic pricing updates (create pricing models from market analyses)
+      // 5. Dynamic pricing updates (create pricing models from market analyses)
       const pricingModels = new Map<number, any>()
       for (const analysis of marketAnalyses) {
         pricingModels.set(analysis.marketId, {
@@ -164,7 +167,7 @@ export class LPService extends BaseService {
       }
       await this.updateDynamicPricing(pricingModels)
       
-      // 5. Detect arbitrage opportunities
+      // 6. Detect arbitrage opportunities
       await this.detectAndExecuteArbitrage()
       
     } catch (error) {
@@ -180,8 +183,8 @@ export class LPService extends BaseService {
 
     try {
       // Add smaller amounts for rebalancing
-      const amountA = ethers.parseEther('0.1') // 0.1 ETH
-      const amountB = ethers.parseEther('0.1') // 0.1 ETH equivalent
+      const amountA = ethers.parseEther('0.1') // 0.1 FLOW
+      const amountB = ethers.parseEther('0.1') // 0.1 FLOW equivalent
       
       const tx = await (this.ammEngine.connect(this.wallet) as any).addLiquidity(
         BigInt(marketId),
@@ -189,7 +192,7 @@ export class LPService extends BaseService {
         amountB,
         {
           gasLimit: 500000, // Increased gas limit for AMM operations
-          value: amountA // Send ETH as amountA
+          value: amountA + amountB // Native-only pool: send both as value
         }
       )
 
@@ -225,8 +228,7 @@ export class LPService extends BaseService {
         BigInt(marketId),
         lpTokens,
         {
-          gasLimit: 500000, // Increased gas limit for AMM operations
-          value: amountA // Send ETH as amountA
+          gasLimit: 500000 // Increased gas limit for AMM operations
         }
       )
 
@@ -372,5 +374,25 @@ export class LPService extends BaseService {
     
     const optimalPercentage = Math.min(0.5, volatilityFactor * liquidityFactor)
     return BigInt(Math.floor(Number(lpTokens) * optimalPercentage))
+  }
+
+  private async seedLiquidityIfNeeded(): Promise<void> {
+    if (!this.wallet) return
+    try {
+      for (const marketId of [1, 2, 3]) {
+        try {
+          const market = await this.ammEngine.getMarket(marketId)
+          const total = market.reserveA + market.reserveB
+          if (total === 0n) {
+            this.logActivity(`Seeding initial liquidity for empty market ${marketId}`)
+            await this.provideInitialLiquidity(marketId)
+          }
+        } catch (err) {
+          this.logError(err as Error, `Failed checking liquidity for market ${marketId}`)
+        }
+      }
+    } catch (error) {
+      this.logError(error as Error, 'Failed to seed liquidity')
+    }
   }
 }

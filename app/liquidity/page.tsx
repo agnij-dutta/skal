@@ -29,7 +29,7 @@ import { useGetMarket, useAddLiquidity, useRemoveLiquidity, useGetLPTokenBalance
 import { useAccount, useWatchContractEvent } from 'wagmi'
 import { formatEther } from 'viem'
 import { AMM_ENGINE_ABI } from '@/lib/contracts/abis/ammEngine'
-import { CONTRACT_ADDRESSES } from '@/lib/somnia-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '@/lib/flow-config'
 
 interface LiquidityPosition {
   id: string
@@ -162,11 +162,11 @@ function LiquidityContent() {
         return {
           id,
           name: metadata.name,
-          totalLiquidity: '0 STT',
-          volume24h: '0 STT',
-          fees24h: '0 STT',
+          totalLiquidity: '0 FLOW',
+          volume24h: '0 FLOW',
+          fees24h: '0 FLOW',
           apy: 0,
-          price: '0 STT',
+          price: '0 FLOW',
           change24h: 0,
           liquidityHistory: [],
           isLoading: true,
@@ -177,11 +177,11 @@ function LiquidityContent() {
         return {
           id,
           name: metadata.name,
-          totalLiquidity: '0 STT',
-          volume24h: '0 STT',
-          fees24h: '0 STT',
+          totalLiquidity: '0 FLOW',
+          volume24h: '0 FLOW',
+          fees24h: '0 FLOW',
           apy: 0,
-          price: '0 STT',
+          price: '0 FLOW',
           change24h: 0,
           liquidityHistory: [],
           isLoading: false,
@@ -226,11 +226,11 @@ function LiquidityContent() {
       return {
         id,
         name: metadata.name,
-        totalLiquidity: `${liquidity} STT`,
-        volume24h: `${(baseLiquidity * 0.1).toFixed(3)} STT`, // Estimated based on liquidity
-        fees24h: `${(baseLiquidity * 0.001).toFixed(4)} STT`, // Estimated fees
+        totalLiquidity: `${liquidity} FLOW`,
+        volume24h: `${(baseLiquidity * 0.1).toFixed(3)} FLOW`, // Estimated based on liquidity
+        fees24h: `${(baseLiquidity * 0.001).toFixed(4)} FLOW`, // Estimated fees
         apy: apy,
-        price: `${price} STT`,
+        price: `${price} FLOW`,
         change24h: recentChange,
         liquidityHistory,
         isLoading: false,
@@ -270,8 +270,8 @@ function LiquidityContent() {
           id: `position-${id}`,
           marketId: id,
           marketName: metadata.name,
-          tokenA: 'STT',
-          tokenB: 'STT',
+          tokenA: 'FLOW',
+          tokenB: 'FLOW',
           amountA: formatEther(userAmountA),
           amountB: formatEther(userAmountB),
           lpTokens: formatEther(lpTokenBalance),
@@ -395,7 +395,7 @@ function LiquidityContent() {
             <DollarSign className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{totalValue.toFixed(2)} STT</div>
+            <div className="text-2xl font-bold text-white">{totalValue.toFixed(2)} FLOW</div>
             <p className="text-xs text-white/70">In liquidity positions</p>
           </CardContent>
         </Card>
@@ -406,7 +406,7 @@ function LiquidityContent() {
             <TrendingUp className="h-4 w-4 text-white/70" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{totalFees.toFixed(3)} STT</div>
+            <div className="text-2xl font-bold text-white">{totalFees.toFixed(3)} FLOW</div>
             <p className="text-xs text-white/70">This month</p>
           </CardContent>
         </Card>
@@ -483,7 +483,7 @@ function LiquidityContent() {
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
                       <div>
                         <p className="text-sm text-white/70">Fees Earned</p>
-                        <p className="font-semibold text-white">{position.feesEarned} STT</p>
+                        <p className="font-semibold text-white">{position.feesEarned} FLOW</p>
                       </div>
                       <div>
                         <p className="text-sm text-white/70">Created</p>
@@ -643,7 +643,7 @@ function LiquidityContent() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="amountA" className="text-white">STT Amount</Label>
+                  <Label htmlFor="amountA" className="text-white">FLOW Amount</Label>
                   <Input
                     id="amountA"
                     type="number"

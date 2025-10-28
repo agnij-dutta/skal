@@ -3,7 +3,7 @@
 import { useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEther } from 'viem'
 import { ESCROW_MANAGER_ABI } from '../abis/escrowManager'
-import { CONTRACT_ADDRESSES } from '../../somnia-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '../../flow-config'
 
 const ESCROW_MANAGER_ADDRESS = CONTRACT_ADDRESSES.ESCROW_MANAGER as `0x${string}`
 

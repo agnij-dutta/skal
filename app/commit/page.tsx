@@ -26,7 +26,7 @@ import { useGetTotalTasks } from '@/lib/contracts/hooks/useCommitRegistry'
 import { storageClient } from '@/lib/storage-client'
 import { useAccount } from 'wagmi'
 import { generateDeterministicKey, generateDeterministicNonce } from '@/lib/crypto-utils'
-import { CONTRACT_ADDRESSES } from '@/lib/somnia-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '@/lib/flow-config'
 import { useOracleStatus, useWatchOracleEvents } from '@/lib/contracts/hooks/useOracle'
 
 interface CommitStep {
@@ -423,7 +423,7 @@ function CommitContent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="stakeAmount" className="text-white">Stake Amount (STT)</Label>
+                <Label htmlFor="stakeAmount" className="text-white">Stake Amount (FLOW)</Label>
                 <Input
                   id="stakeAmount"
                   type="number"
@@ -433,7 +433,7 @@ function CommitContent() {
                   className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
                 <p className="text-sm text-white/70">
-                  Minimum stake: 0.05 STT. Higher stakes increase trust and visibility.
+                  Minimum stake: 0.05 FLOW. Higher stakes increase trust and visibility.
                 </p>
               </div>
 
@@ -487,15 +487,15 @@ function CommitContent() {
               <div className="space-y-4">
                 <div className="flex justify-between text-white">
                   <span>Stake Amount:</span>
-                  <span className="font-medium">{formData.stakeAmount} STT</span>
+                  <span className="font-medium">{formData.stakeAmount} FLOW</span>
                 </div>
                 <div className="flex justify-between text-white">
                   <span>Gas Fee:</span>
-                  <span className="font-medium">~0.001 STT</span>
+                  <span className="font-medium">~0.001 FLOW</span>
                 </div>
                 <div className="flex justify-between font-bold text-white">
                   <span>Total:</span>
-                  <span>{(parseFloat(formData.stakeAmount) + 0.001).toFixed(3)} STT</span>
+                  <span>{(parseFloat(formData.stakeAmount) + 0.001).toFixed(3)} FLOW</span>
                 </div>
               </div>
 
@@ -567,7 +567,7 @@ function CommitContent() {
                 </div>
                 <div className="flex justify-between">
                   <span>Stake Amount:</span>
-                  <span>{formData.stakeAmount} STT</span>
+                  <span>{formData.stakeAmount} FLOW</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Status:</span>
@@ -759,7 +759,7 @@ function CommitContent() {
                 </div>
                 <div className="flex justify-between">
                   <span>Payment Received:</span>
-                  <span className="font-medium">{formData.stakeAmount} STT</span>
+                  <span className="font-medium">{formData.stakeAmount} FLOW</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Reputation Gain:</span>

@@ -101,9 +101,9 @@ export default function MarketDetailPage() {
         name: metadata.name,
         description: metadata.description,
         category: metadata.category,
-        liquidity: '0 STT',
-        volume24h: '0 STT',
-        price: '0 STT',
+        liquidity: '0 FLOW',
+        volume24h: '0 FLOW',
+        price: '0 FLOW',
         change24h: 0,
         providers: 0,
         commits: 0,
@@ -121,9 +121,9 @@ export default function MarketDetailPage() {
         name: metadata.name,
         description: metadata.description,
         category: metadata.category,
-        liquidity: '0 STT',
-        volume24h: '0 STT',
-        price: '0 STT',
+        liquidity: '0 FLOW',
+        volume24h: '0 FLOW',
+        price: '0 FLOW',
         change24h: 0,
         providers: 0,
         commits: 0,
@@ -159,8 +159,8 @@ export default function MarketDetailPage() {
 
     // Mock recent activity (would come from events in real app)
     const recentActivity = [
-      { type: 'commit' as const, timestamp: '2m ago', user: '0x1234...5678', amount: '0.05 STT' },
-      { type: 'buy' as const, timestamp: '5m ago', user: '0xabcd...efgh', amount: '0.08 STT' },
+      { type: 'commit' as const, timestamp: '2m ago', user: '0x1234...5678', amount: '0.05 FLOW' },
+      { type: 'buy' as const, timestamp: '5m ago', user: '0xabcd...efgh', amount: '0.08 FLOW' },
       { type: 'reveal' as const, timestamp: '8m ago', user: '0x1234...5678' },
       { type: 'verify' as const, timestamp: '10m ago', user: 'Verifier #1' },
       { type: 'commit' as const, timestamp: '15m ago', user: '0x9876...5432', amount: '0.05 STT' },
@@ -178,9 +178,9 @@ export default function MarketDetailPage() {
       name: metadata.name,
       description: metadata.description,
       category: metadata.category,
-      liquidity: `${liquidity} STT`,
-      volume24h: '0 STT', // Would need historical data
-      price: `${price} STT`,
+      liquidity: `${liquidity} FLOW`,
+      volume24h: '0 FLOW', // Would need historical data
+      price: `${price} FLOW`,
       change24h: 0, // Would need historical data
       providers: providerCount,
       commits,
@@ -393,7 +393,7 @@ export default function MarketDetailPage() {
                       <YAxis />
                       <Tooltip 
                         formatter={(value, name) => [
-                          `${value} STT`, 
+                          `${value} FLOW`, 
                           name === 'price' ? 'Price' : 'Supply'
                         ]}
                       />

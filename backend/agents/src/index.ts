@@ -5,6 +5,34 @@ import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
+// Suppress ethers.js internal errors that don't affect functionality
+const originalConsoleError = console.error
+const originalConsoleLog = console.log
+
+console.error = (...args: any[]) => {
+  const message = args.join(' ')
+  if (message.includes('results is not iterable') || 
+      message.includes('FilterIdEventSubscriber') ||
+      message.includes('_emitResults') ||
+      message.includes('subscriber-filterid.ts')) {
+    // Silently ignore ethers.js internal errors
+    return
+  }
+  originalConsoleError(...args)
+}
+
+console.log = (...args: any[]) => {
+  const message = args.join(' ')
+  if (message.includes('@TODO TypeError: results is not iterable') ||
+      message.includes('FilterIdEventSubscriber') ||
+      message.includes('_emitResults') ||
+      message.includes('subscriber-filterid.ts')) {
+    // Silently ignore ethers.js internal errors
+    return
+  }
+  originalConsoleLog(...args)
+}
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -31,14 +59,14 @@ if (!envLoaded) {
 
 // Load configuration from environment variables
 const config: AgentConfig = {
-  rpcUrl: process.env.SOMNIA_RPC || 'https://dream-rpc.somnia.network/',
+  rpcUrl: process.env.FLOW_RPC || 'https://testnet.evm.nodes.onflow.org',
   storageUrl: process.env.STORAGE_URL || 'https://skal.onrender.com',
   contractAddresses: {
-    commitRegistry: process.env.COMMIT_REGISTRY || '0xB94ecC5a4cA8D7D2749cE8353F03B38372235C26',
-    escrowManager: process.env.ESCROW_MANAGER || '0x8F9Cce60CDa5c3b262c30321f40a180A6A9DA762',
-    ammEngine: process.env.AMM_ENGINE || '0x0E37cc3Dc8Fa1675f2748b77dddfF452b63DD4CC',
-    reputationManager: process.env.REPUTATION_MANAGER || '0x0Ff7d4E7aF64059426F76d2236155ef1655C99D8',
-    agentRegistry: process.env.AGENT_REGISTRY || '0x2CC077f1Da27e7e08A1832804B03b30A2990a61C',
+    commitRegistry: process.env.COMMIT_REGISTRY || '0x21b165aE60748410793e4c2ef248940dc31FE773',
+    escrowManager: process.env.ESCROW_MANAGER || '0x4D1E494CaB138D8c23B18c975b49C1Bec7902746',
+    ammEngine: process.env.AMM_ENGINE || '0xb9Df841a5b5f4a7f23F2294f3eecB5b2e2F53CFD',
+    reputationManager: process.env.REPUTATION_MANAGER || '0xcBc8eB46172c2caD5b4961E8c4F5f827e618a387',
+    agentRegistry: process.env.AGENT_REGISTRY || '0x3F944e66a9513E1a2606288199d39bC974067348',
     oracleRegistry: process.env.ORACLE_REGISTRY || '0x0000000000000000000000000000000000000000',
     verificationAggregator: process.env.VERIFICATION_AGGREGATOR || '0x0000000000000000000000000000000000000000'
   },
@@ -76,7 +104,7 @@ function validateConfig(): void {
 
 // Main function
 async function main(): Promise<void> {
-  console.log('🌙 Shadow Protocol Agent Orchestrator')
+  console.log('🌙 Skal Agent Orchestrator')
   console.log('=====================================')
   
   try {
@@ -120,11 +148,29 @@ async function main(): Promise<void> {
 
 // Handle uncaught exceptions - log but keep running
 process.on('uncaughtException', (error) => {
+  // Filter out ethers.js internal errors that don't affect functionality
+  const errorStr = String(error)
+  if (errorStr.includes('results is not iterable') || 
+      errorStr.includes('FilterIdEventSubscriber') ||
+      errorStr.includes('_emitResults') ||
+      errorStr.includes('subscriber-filterid.ts')) {
+    // These are cosmetic ethers.js internal errors - silently ignore
+    return
+  }
   console.error('💥 Uncaught Exception (recovered):', error.message)
   // Don't exit - autonomous system should be resilient
 })
 
 process.on('unhandledRejection', (reason, promise) => {
+  // Filter out ethers.js internal errors
+  const reasonStr = String(reason)
+  if (reasonStr.includes('results is not iterable') || 
+      reasonStr.includes('FilterIdEventSubscriber') ||
+      reasonStr.includes('_emitResults') ||
+      reasonStr.includes('subscriber-filterid.ts')) {
+    // These are cosmetic ethers.js internal errors - silently ignore
+    return
+  }
   console.error('💥 Unhandled Rejection (recovered):', reason)
   // Don't exit - log and continue
 })

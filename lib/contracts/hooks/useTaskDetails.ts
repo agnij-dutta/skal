@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import { useReadContract } from 'wagmi'
 import { COMMIT_REGISTRY_ABI } from '../abis/commitRegistry'
-import { CONTRACT_ADDRESSES } from '../../somnia-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '../../flow-config'
 import { formatEther } from 'viem'
 
 interface TaskDetails {

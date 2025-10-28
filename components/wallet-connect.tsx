@@ -2,12 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi'
+import { useAccount, useConnect, useDisconnect, useSwitchChain, useChainId } from 'wagmi'
 import { Button } from './ui/button'
-import { Wallet, LogOut, Copy, Check } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { Wallet, LogOut, Copy, Check, Network } from 'lucide-react'
 import { toast } from 'sonner'
 import { injected } from 'wagmi/connectors'
 import { shortenAddress } from '@/lib/utils'
+import { flowEvmTestnet } from '@/lib/flow-config'
 
 interface WalletConnectProps {
   className?: string
@@ -21,27 +23,24 @@ export function WalletConnect({ className }: WalletConnectProps) {
   const { connect, isPending: isConnecting } = useConnect()
   const { disconnect } = useDisconnect()
   const { switchChain } = useSwitchChain()
+  const chainId = useChainId()
 
   const connectWallet = async () => {
     try {
-      // First switch to the correct network
+      // First switch to Flow EVM
       try {
-        await switchChain({ chainId: 50312 }) // Somnia Testnet
+        await switchChain({ chainId: flowEvmTestnet.id })
       } catch (switchError: any) {
         // If the chain doesn't exist, add it
         if (switchError?.code === 4902) {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
             params: [{
-              chainId: '0xc488', // 50312 in hex
-              chainName: 'Somnia Testnet',
-              nativeCurrency: {
-                name: 'Somnia Test Token',
-                symbol: 'STT',
-                decimals: 18,
-              },
-              rpcUrls: ['https://dream-rpc.somnia.network/'],
-              blockExplorerUrls: ['https://shannon-explorer.somnia.network/'],
+              chainId: `0x${flowEvmTestnet.id.toString(16)}`,
+              chainName: flowEvmTestnet.name,
+              nativeCurrency: flowEvmTestnet.nativeCurrency,
+              rpcUrls: flowEvmTestnet.rpcUrls.default.http,
+              blockExplorerUrls: flowEvmTestnet.blockExplorers?.default?.url ? [flowEvmTestnet.blockExplorers.default.url] : [],
             }],
           })
         } else {
@@ -52,7 +51,7 @@ export function WalletConnect({ className }: WalletConnectProps) {
       // Connect wallet
       connect({ 
         connector: injected(),
-        chainId: 50312 
+        chainId: flowEvmTestnet.id 
       })
       
       toast.success('Wallet connected successfully!')
@@ -82,10 +81,34 @@ export function WalletConnect({ className }: WalletConnectProps) {
     }
   }
 
+  const handleNetworkChange = async (newChainId: string) => {
+    try {
+      await switchChain({ chainId: Number(newChainId) })
+      toast.success('Network switched')
+    } catch (error) {
+      console.error('Failed to switch network:', error)
+      toast.error('Failed to switch network')
+    }
+  }
+
+  const getNetworkName = () => {
+    if (chainId === flowEvmTestnet.id) return 'Flow EVM'
+    return 'Other'
+  }
+
 
   if (isConnected && address) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
+        <Select value={chainId.toString()} onValueChange={handleNetworkChange}>
+          <SelectTrigger className="w-[140px] bg-white/10 border-white/20 text-white">
+            <Network className="h-4 w-4 mr-2" />
+            <SelectValue>{getNetworkName()}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={flowEvmTestnet.id.toString()}>Flow EVM</SelectItem>
+          </SelectContent>
+        </Select>
         <Button
           size="sm"
           onClick={copyAddress}

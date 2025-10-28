@@ -4,7 +4,7 @@ import { useWriteContract, useReadContract, useWaitForTransactionReceipt } from 
 import { useMemo } from 'react'
 import { parseEther, encodeFunctionData } from 'viem'
 import { COMMIT_REGISTRY_ABI } from '../abis/commitRegistry'
-import { CONTRACT_ADDRESSES } from '../../somnia-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '../../flow-config'
 
 const COMMIT_REGISTRY_ADDRESS = CONTRACT_ADDRESSES.COMMIT_REGISTRY as `0x${string}`
 

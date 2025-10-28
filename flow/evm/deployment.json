@@ -17,7 +17,7 @@
     "2": "DeFi Signals",
     "3": "NLP Embeddings"
   },
-  "oracleRegistry": "0x7D13E10a328c00fb40da626eBF524bd0BFdF5350",
-  "verificationAggregator": "0xE949fa1A74D18E7888704B5e6E722b9a920AFE28",
-  "oracleDeployedAt": "2025-10-23T20:40:43.380Z"
+  "oracleRegistry": "0x6bE799db96487ba39262e15e6D8b1b67aC8b4DA0",
+  "verificationAggregator": "0xDB49635E5Eb88719A1281CDa32578fA1837297E9",
+  "oracleDeployedAt": "2025-10-27T21:43:21.732Z"
 }

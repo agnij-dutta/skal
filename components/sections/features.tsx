@@ -23,7 +23,7 @@ const FEATURES = [
     desc: "Composable JS/Python APIs for commit(), reveal(), buy_signal(), verify() with encryption, hashing, and contract calls.",
   },
   {
-    title: "Somnia Agents",
+    title: "Flow Agents",
     desc: "Autonomous agents act as providers, verifiers, and traders—operating, validating, and learning from reputation data.",
   },
 ]

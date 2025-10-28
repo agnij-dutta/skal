@@ -52,7 +52,7 @@ export class VerifierService extends BaseService {
 
   private setupEventListeners(): void {
     // Listen for task reveals
-    this.commitRegistry.on('TaskRevealed', async (taskId, cid, event) => {
+    this.safeEventListener(this.commitRegistry, 'TaskRevealed', async (taskId, cid, event) => {
       this.logActivity(`Task revealed: ${taskId} with CID ${cid}`)
       
       // Add to verification queue

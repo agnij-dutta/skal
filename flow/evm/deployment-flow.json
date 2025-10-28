@@ -1,0 +1,18 @@
+{
+  "network": "flow-evm-testnet",
+  "chainId": 545,
+  "timestamp": "2025-10-27T19:29:01.019Z",
+  "deployer": "0xe87758C6CCcf3806C9f1f0C8F99f6Dcae36E5449",
+  "contracts": {
+    "CommitRegistry": "0x21b165aE60748410793e4c2ef248940dc31FE773",
+    "EscrowManager": "0x4D1E494CaB138D8c23B18c975b49C1Bec7902746",
+    "AMMEngine": "0xb9Df841a5b5f4a7f23F2294f3eecB5b2e2F53CFD",
+    "ReputationManager": "0xcBc8eB46172c2caD5b4961E8c4F5f827e618a387",
+    "AgentRegistry": "0x3F944e66a9513E1a2606288199d39bC974067348"
+  },
+  "markets": {
+    "1": "ETH Price Prediction",
+    "2": "DeFi Signals",
+    "3": "NLP Embeddings"
+  }
+}

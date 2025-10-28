@@ -7,7 +7,7 @@ import { useAccount } from 'wagmi'
 import { formatEther } from 'viem'
 import { useReadContract, useReadContracts } from 'wagmi'
 import { COMMIT_REGISTRY_ABI } from '../abis/commitRegistry'
-import { CONTRACT_ADDRESSES } from '../../somnia-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '../../flow-config'
 import { shortenAddress } from '../../utils'
 // import { useTaskDetails } from './useTaskDetails' // Commented out to avoid conflict
 
@@ -138,8 +138,8 @@ export function useSignals(marketId?: number) {
           provider: '0x...',
           providerReputation: 0,
           description: 'Loading...',
-          price: '0 STT',
-          stake: '0 STT',
+          price: '0 FLOW',
+          stake: '0 FLOW',
           commitTime: 'Loading...',
           status: 'available' as const,
           category: metadata.category,
@@ -149,7 +149,7 @@ export function useSignals(marketId?: number) {
 
       // Use real contract data if available
       let providerAddress = '0x...'
-      let stake = '0 STT'
+      let stake = '0 FLOW'
       let timestamp = 0
       let state = 0
       let validationScore = 0
@@ -158,7 +158,7 @@ export function useSignals(marketId?: number) {
       if (taskDetail?.result) {
         const task = taskDetail.result as any
         providerAddress = task.provider || '0x...'
-        stake = task.stake ? formatEther(task.stake) + ' STT' : '0 STT'
+        stake = task.stake ? formatEther(task.stake) + ' FLOW' : '0 FLOW'
         timestamp = Number(task.timestamp || 0)
         state = Number(task.state || 0)
         validationScore = Number(task.validationScore || 0)
@@ -200,7 +200,7 @@ export function useSignals(marketId?: number) {
         provider: providerAddress, // Store full address for key generation
         providerReputation,
         description: `AI output for ${metadata.name}`,
-        price: `${price} STT`,
+        price: `${price} FLOW`,
         stake,
         commitTime: `${timeAgo} minutes ago`,
         status: getStatusFromTaskState(state),

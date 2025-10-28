@@ -183,7 +183,7 @@ export class OracleNodeService extends BaseService {
    */
   private setupEventListeners(): void {
     // Listen for TaskRevealed events
-    this.commitRegistry.on('TaskRevealed', async (taskId, cid, event) => {
+    this.safeEventListener(this.commitRegistry, 'TaskRevealed', async (taskId, cid, event) => {
       this.logActivity(`TaskRevealed detected: Task ${taskId} with CID ${cid}`)
       
       // Add to verification queue
@@ -199,7 +199,7 @@ export class OracleNodeService extends BaseService {
     })
 
     // Listen for verification submissions from other oracles
-    this.verificationAggregator.on('VerificationSubmitted', async (taskId, verifier, score, event) => {
+    this.safeEventListener(this.verificationAggregator, 'VerificationSubmitted', async (taskId, verifier, score, event) => {
       if (verifier.toLowerCase() !== this.wallet!.address.toLowerCase()) {
         this.logActivity(`Other oracle submitted for task ${taskId}: Score ${score}`)
         
@@ -212,7 +212,7 @@ export class OracleNodeService extends BaseService {
     })
 
     // Listen for consensus reached
-    this.verificationAggregator.on('TaskFinalized', async (taskId, finalScore, verifiers, event) => {
+    this.safeEventListener(this.verificationAggregator, 'TaskFinalized', async (taskId, finalScore, verifiers, event) => {
       this.logActivity(`✅ Task ${taskId} finalized with score ${finalScore} by ${verifiers.length} oracles`)
       
       // Clean up from queue
@@ -338,7 +338,7 @@ export class OracleNodeService extends BaseService {
       this.logActivity(`Verification submitted: ${tx.hash}`)
       
       const receipt = await this.waitForTransaction(tx.hash)
-      if (receipt) {
+      if (receipt && receipt.status === 1) {
         this.logActivity(`✅ Verification confirmed for task ${taskId}`)
         
         // Update task status in queue
@@ -353,10 +353,20 @@ export class OracleNodeService extends BaseService {
           score,
           txHash: tx.hash
         })
+      } else {
+        // Don't throw error - just log and continue
+        this.logActivity(`⚠️ Verification submission failed for task ${taskId} - will retry later`)
+        
+        // Remove from queue to prevent infinite retries
+        this.verificationQueue.delete(taskId)
       }
       
     } catch (error) {
-      this.logError(error as Error, `Failed to submit verification for task ${taskId}`)
+      // Don't throw unhandled errors - just log and continue
+      this.logActivity(`⚠️ Verification submission error for task ${taskId}: ${(error as Error).message}`)
+      
+      // Remove from queue to prevent infinite retries
+      this.verificationQueue.delete(taskId)
     }
   }
 

@@ -3,7 +3,7 @@
 import { useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEther } from 'viem'
 import { REPUTATION_MANAGER_ABI } from '../abis/reputationManager'
-import { CONTRACT_ADDRESSES } from '../../somnia-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '../../flow-config'
 
 const REPUTATION_MANAGER_ADDRESS = CONTRACT_ADDRESSES.REPUTATION_MANAGER as `0x${string}`
 

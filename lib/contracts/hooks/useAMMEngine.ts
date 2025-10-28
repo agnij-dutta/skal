@@ -4,7 +4,7 @@ import { useWriteContract, useReadContract, useWaitForTransactionReceipt } from 
 import { useMemo } from 'react'
 import { parseEther } from 'viem'
 import { AMM_ENGINE_ABI } from '../abis/ammEngine'
-import { CONTRACT_ADDRESSES } from '../../somnia-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '../../flow-config'
 
 const AMM_ENGINE_ADDRESS = CONTRACT_ADDRESSES.AMM_ENGINE as `0x${string}`
 
@@ -61,7 +61,7 @@ export function useAddLiquidity() {
     amountB: string
   ) => {
     const amountAWei = parseEther(amountA)
-    const amountBWei = parseEther(amountB) // Both amounts should be in STT (same token)
+    const amountBWei = parseEther(amountB) // Both amounts should be in FLOW (same token)
     
     return writeContract({
       address: AMM_ENGINE_ADDRESS,

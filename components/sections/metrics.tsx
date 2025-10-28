@@ -5,7 +5,7 @@ const METRICS = [
   { value: "100+", label: "Validated trades across 5+ markets" },
   { value: "<5s", label: "Oracle verification latency" },
   { value: "≤10%", label: "Dispute rate target" },
-  { value: "20+", label: "Active Somnia Agents" },
+  { value: "20+", label: "Active Flow Agents" },
   { value: "10+", label: "External teams using SDK" },
 ]
 

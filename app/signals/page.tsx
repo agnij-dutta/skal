@@ -429,7 +429,7 @@ function SignalsContent() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="maxPrice" className="text-white">Max Price (STT)</Label>
+                <Label htmlFor="maxPrice" className="text-white">Max Price (FLOW)</Label>
                 <Input
                   id="maxPrice"
                   type="number"
@@ -681,7 +681,7 @@ function SignalsContent() {
             </CardHeader>
             <CardContent className="space-y-4 p-6">
               <div className="space-y-2">
-                <Label htmlFor="amount" className="text-white/90">Amount (STT)</Label>
+                <Label htmlFor="amount" className="text-white/90">Amount (FLOW)</Label>
                 <Input
                   id="amount"
                   type="number"
@@ -700,11 +700,11 @@ function SignalsContent() {
                 </div>
                 <div className="flex justify-between text-white/80">
                   <span>Gas Fee:</span>
-                  <span>~0.001 STT</span>
+                  <span>~0.001 FLOW</span>
                 </div>
                 <div className="flex justify-between font-bold text-white">
                   <span>Total:</span>
-                  <span>{(parseFloat(buyAmount || selectedSignal.price) + 0.001).toFixed(3)} STT</span>
+                  <span>{(parseFloat(buyAmount || selectedSignal.price) + 0.001).toFixed(3)} FLOW</span>
                 </div>
               </div>
 

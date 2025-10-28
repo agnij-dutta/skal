@@ -188,12 +188,14 @@ export class ProviderService extends BaseService {
     }
   }
 
-  private generateMockOutput(): string {
+  private generateMockOutput(params?: TaskParams): string {
+    const now = Date.now()
+    const marketLabel = params?.marketId === 2 ? 'DeFi' : params?.marketId === 3 ? 'NLP' : 'General'
     const outputs = [
-      '{"prediction": "ETH will reach $3,500 by end of week", "confidence": 0.85, "timestamp": "' + Date.now() + '"}',
-      '{"signal": "BUY", "asset": "ETH", "price": 3200, "confidence": 0.92, "timestamp": "' + Date.now() + '"}',
-      '{"embedding": [0.1, 0.2, 0.3, 0.4, 0.5], "text": "Sample text for NLP", "timestamp": "' + Date.now() + '"}',
-      '{"analysis": "Market shows bullish sentiment", "score": 8.5, "timestamp": "' + Date.now() + '"}'
+      JSON.stringify({ prediction: `${marketLabel} signal indicates upside`, confidence: 0.85, timestamp: String(now) }),
+      JSON.stringify({ signal: 'BUY', market: marketLabel, score: 0.92, timestamp: String(now) }),
+      JSON.stringify({ embedding: [0.1, 0.2, 0.3, 0.4, 0.5], text: 'Sample text for NLP', timestamp: String(now) }),
+      JSON.stringify({ analysis: 'Market shows bullish sentiment', score: 8.5, timestamp: String(now) })
     ]
     
     return outputs[Math.floor(Math.random() * outputs.length)]
@@ -252,20 +254,16 @@ export class ProviderService extends BaseService {
 
   private setupEventListeners(): void {
     // Listen for FundsLocked events to automatically reveal tasks
-    this.escrowManager.on('FundsLocked', async (taskId, buyer, provider, amount, timestamp, event) => {
-      try {
-        const taskIdNum = Number(taskId)
-        this.logActivity(`🔓 FundsLocked event received: task ${taskIdNum} by ${buyer}, provider ${provider}, amount ${amount}`)
-        
-        // Only reveal if this provider created the task
-        if (provider.toLowerCase() === this.wallet!.address.toLowerCase()) {
-          this.logActivity(`🎯 This is our task! Revealing task ${taskIdNum}...`)
-          await this.revealTask(taskIdNum)
-        } else {
-          this.logActivity(`⏭️ Task ${taskIdNum} belongs to different provider ${provider}, skipping`)
-        }
-      } catch (error) {
-        this.logError(error as Error, `Failed to handle FundsLocked event for task ${taskId}`)
+    this.safeEventListener(this.escrowManager, 'FundsLocked', async (taskId, buyer, provider, amount, timestamp, event) => {
+      const taskIdNum = Number(taskId)
+      this.logActivity(`🔓 FundsLocked event received: task ${taskIdNum} by ${buyer}, provider ${provider}, amount ${amount}`)
+      
+      // Only reveal if this provider created the task
+      if (provider.toLowerCase() === this.wallet!.address.toLowerCase()) {
+        this.logActivity(`🎯 This is our task! Revealing task ${taskIdNum}...`)
+        await this.revealTask(taskIdNum)
+      } else {
+        this.logActivity(`⏭️ Task ${taskIdNum} belongs to different provider ${provider}, skipping`)
       }
     })
     
@@ -310,12 +308,12 @@ export class ProviderService extends BaseService {
         })
         return true
       } else {
-        this.logError(new Error('Transaction failed'), `Task ${taskId} revelation failed`)
+        this.logActivity(`⚠️ Task ${taskId} revelation failed - will retry later`)
         return false
       }
       
     } catch (error) {
-      this.logError(error as Error, `Failed to reveal task ${taskId}`)
+      this.logActivity(`⚠️ Failed to reveal task ${taskId}: ${(error as Error).message}`)
       return false
     }
   }
@@ -429,7 +427,7 @@ export class ProviderService extends BaseService {
       this.logError(error as Error, 'Failed to generate intelligent data')
       // Fallback to mock data
       return {
-        data: this.generateMockOutput(),
+        data: this.generateMockOutput(params),
         qualityScore: 0.6,
         metadata: params
       }

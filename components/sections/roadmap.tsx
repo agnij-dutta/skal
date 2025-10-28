@@ -4,8 +4,8 @@ import { Card } from "@/components/ui/card"
 const PHASES = [
   {
     tag: "v1.0 • 6 weeks",
-    title: "Core Exchange + Oracle + Somnia MVP",
-    desc: "Commit–Reveal, Escrow, and Validation live on Somnia Testnet.",
+    title: "Core Exchange + Oracle + Flow MVP",
+    desc: "Commit–Reveal, Escrow, and Validation live on Flow EVM.",
   },
   {
     tag: "v1.1 • 10 weeks",
@@ -19,8 +19,8 @@ const PHASES = [
   },
   {
     tag: "v1.3 • 18 weeks",
-    title: "Shadow Agents + Automation",
-    desc: "Autonomous Somnia agents trading and verifying at scale.",
+    title: "Skal Agents + Automation",
+    desc: "Autonomous Flow agents trading and verifying at scale.",
   },
   {
     tag: "v2.0 • Launch",

@@ -3,7 +3,7 @@
 import { useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEther } from 'viem'
 import { AGENT_REGISTRY_ABI } from '../abis/agentRegistry'
-import { CONTRACT_ADDRESSES } from '../../somnia-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '../../flow-config'
 
 const AGENT_REGISTRY_ADDRESS = CONTRACT_ADDRESSES.AGENT_REGISTRY as `0x${string}`
 

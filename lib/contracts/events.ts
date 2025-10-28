@@ -6,7 +6,7 @@ import { ESCROW_MANAGER_ABI } from './abis/escrowManager'
 import { AMM_ENGINE_ABI } from './abis/ammEngine'
 import { REPUTATION_MANAGER_ABI } from './abis/reputationManager'
 import { AGENT_REGISTRY_ABI } from './abis/agentRegistry'
-import { CONTRACT_ADDRESSES } from '../somnia-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '../flow-config'
 
 const COMMIT_REGISTRY_ADDRESS = CONTRACT_ADDRESSES.COMMIT_REGISTRY as `0x${string}`
 const ESCROW_MANAGER_ADDRESS = CONTRACT_ADDRESSES.ESCROW_MANAGER as `0x${string}`
