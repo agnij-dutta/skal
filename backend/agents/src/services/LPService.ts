@@ -35,6 +35,9 @@ export class LPService extends BaseService {
       // Start rebalancing process (will check if liquidity exists before acting)
       this.startRebalancing()
       
+      // Start active market monitoring and investment
+      this.startActiveInvestment()
+      
       this.logActivity('AI-driven LP agent ready to provide liquidity and rebalance markets')
       
     } catch (error) {
@@ -107,6 +110,19 @@ export class LPService extends BaseService {
     this.rebalanceInterval = setInterval(async () => {
       await this.rebalanceLiquidity()
     }, this.rebalanceIntervalMs)
+  }
+
+  private startActiveInvestment(): void {
+    // Start active market monitoring and investment
+    setInterval(async () => {
+      try {
+        await this.analyzeAndInvest()
+      } catch (error) {
+        this.logActivity(`Active investment error: ${(error as Error).message}`)
+      }
+    }, 120000) // Every 2 minutes
+
+    this.logActivity('Started active market investment...')
   }
 
   private async rebalanceLiquidity(): Promise<void> {
@@ -393,6 +409,143 @@ export class LPService extends BaseService {
       }
     } catch (error) {
       this.logError(error as Error, 'Failed to seed liquidity')
+    }
+  }
+
+  private async analyzeAndInvest(): Promise<void> {
+    if (!this.wallet) {
+      return
+    }
+
+    try {
+      this.logActivity('🔍 Analyzing market conditions for investment opportunities...')
+      
+      // Get current market data
+      const marketData = await this.getMarketData()
+      
+      // Analyze which markets need more liquidity
+      const investmentOpportunities = await this.identifyInvestmentOpportunities(marketData)
+      
+      for (const opportunity of investmentOpportunities) {
+        this.logActivity(`💰 Investment opportunity: Market ${opportunity.marketId} - ${opportunity.reason}`)
+        
+        // Add liquidity to underperforming markets
+        await this.addLiquidityToMarket(opportunity.marketId, opportunity.amount)
+        
+        // Wait a bit between investments
+        await new Promise(resolve => setTimeout(resolve, 5000))
+      }
+      
+    } catch (error) {
+      this.logActivity(`Error in active investment analysis: ${(error as Error).message}`)
+    }
+  }
+
+  private async getMarketData(): Promise<any[]> {
+    try {
+      // Get data for all markets
+      const markets = []
+      for (let marketId = 1; marketId <= 3; marketId++) {
+        try {
+          const liquidity = await this.ammEngine.getLiquidity(marketId)
+          const price = await this.ammEngine.getPrice(marketId)
+          const volume = await this.getMarketVolume(marketId)
+          
+          markets.push({
+            marketId,
+            liquidity: Number(ethers.formatEther(liquidity)),
+            price: Number(ethers.formatEther(price)),
+            volume,
+            utilization: volume / Number(ethers.formatEther(liquidity)) || 0
+          })
+        } catch (error) {
+          // Market might not exist yet
+          markets.push({
+            marketId,
+            liquidity: 0,
+            price: 0,
+            volume: 0,
+            utilization: 0
+          })
+        }
+      }
+      
+      return markets
+    } catch (error) {
+      this.logActivity(`Error getting market data: ${(error as Error).message}`)
+      return []
+    }
+  }
+
+  private async identifyInvestmentOpportunities(marketData: any[]): Promise<any[]> {
+    const opportunities = []
+    
+    for (const market of marketData) {
+      // Invest in markets with low liquidity
+      if (market.liquidity < 0.5) {
+        opportunities.push({
+          marketId: market.marketId,
+          reason: 'Low liquidity - needs seeding',
+          amount: '0.5'
+        })
+      }
+      
+      // Invest in markets with high utilization (active trading)
+      if (market.utilization > 0.8 && market.liquidity < 2.0) {
+        opportunities.push({
+          marketId: market.marketId,
+          reason: 'High utilization - needs more liquidity',
+          amount: '1.0'
+        })
+      }
+      
+      // Invest in markets with zero volume (dead markets need revival)
+      if (market.volume === 0 && market.liquidity < 1.0) {
+        opportunities.push({
+          marketId: market.marketId,
+          reason: 'Dead market - needs revival',
+          amount: '0.8'
+        })
+      }
+    }
+    
+    return opportunities
+  }
+
+  private async addLiquidityToMarket(marketId: number, amount: string): Promise<void> {
+    if (!this.wallet) {
+      return
+    }
+
+    try {
+      this.logActivity(`Adding ${amount} FLOW liquidity to market ${marketId}...`)
+      
+      const amountWei = ethers.parseEther(amount)
+      
+      const tx = await this.ammEngine.addLiquidity(
+        marketId,
+        amountWei, // amountA
+        amountWei, // amountB (same token)
+        {
+          value: amountWei // Send native FLOW
+        }
+      )
+      
+      await this.waitForTransaction(tx.hash)
+      this.logActivity(`✅ Added ${amount} FLOW liquidity to market ${marketId}`)
+      
+    } catch (error) {
+      this.logActivity(`Error adding liquidity to market ${marketId}: ${(error as Error).message}`)
+    }
+  }
+
+  private async getMarketVolume(marketId: number): Promise<number> {
+    try {
+      // This would ideally query historical trading data
+      // For now, return a simulated volume based on market activity
+      return Math.random() * 2.0 // Random volume between 0-2 FLOW
+    } catch (error) {
+      return 0
     }
   }
 }
