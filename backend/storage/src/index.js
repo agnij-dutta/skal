@@ -27,6 +27,7 @@ const corsOptions = {
   origin: [
     'http://localhost:3000',
     'https://useskal.vercel.app', // Update with actual frontend URL
+    'https://skal-ai.vercel.app',
   ],
   credentials: true,
   optionsSuccessStatus: 200
