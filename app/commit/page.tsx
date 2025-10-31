@@ -27,6 +27,7 @@ import { storageClient } from '@/lib/storage-client'
 import { useAccount, useChainId, useSwitchChain } from 'wagmi'
 import { generateDeterministicKey, generateDeterministicNonce } from '@/lib/crypto-utils'
 import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES, flowEvmTestnet } from '@/lib/flow-config'
+import { useFlowActions } from '@/lib/hooks/useFlowActions'
 import { useOracleStatus, useWatchOracleEvents } from '@/lib/contracts/hooks/useOracle'
 
 interface CommitStep {
@@ -97,6 +98,9 @@ function CommitContent() {
   const [buyerAddress, setBuyerAddress] = useState<string | null>(null)
   const [verificationScore, setVerificationScore] = useState<number | null>(null)
   const [payoutAmount, setPayoutAmount] = useState<string | null>(null)
+
+  // Flow Actions (FLIPs) - optional wallet-triggered auto-reveal
+  const flowActions = useFlowActions()
   useEffect(() => {
     // Ensure Flow EVM is the active chain when user lands here
     if (typeof window !== 'undefined' && (window as any).ethereum && chainId && chainId !== flowEvmTestnet.id) {
@@ -635,6 +639,34 @@ function CommitContent() {
                   <>
                     <Eye className="h-4 w-4 mr-2" />
                     Reveal Encrypted Data
+                  </>
+                )}
+              </Button>
+
+              <div className="text-center text-white/60">or</div>
+              <Button 
+                onClick={async () => {
+                  if (!taskId) return
+                  try {
+                    // Use Flow Actions autoReveal via wallet, pointing to user's Flow account address
+                    await flowActions.autoReveal(taskId, '0xae8d45e9591b80cb')
+                    toast.success('Flow Action (autoReveal) submitted')
+                  } catch (e:any) {
+                    toast.error('Flow Action failed: ' + (e?.message || 'Unknown error'))
+                  }
+                }}
+                disabled={!taskId || flowActions.isPending}
+                className="w-full bg-white/10 hover:bg-white/20 text-white border-white/30"
+              >
+                {flowActions.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Submitting Flow Action...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="h-4 w-4 mr-2" />
+                    Use Flow Action (Auto-Reveal)
                   </>
                 )}
               </Button>
