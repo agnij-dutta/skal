@@ -24,9 +24,9 @@ import Link from 'next/link'
 import { useCommitTask, useRevealTask, useGetTask, useWatchCommitRegistryEvents, useWatchEscrowManagerEvents } from '@/lib/contracts/hooks'
 import { useGetTotalTasks } from '@/lib/contracts/hooks/useCommitRegistry'
 import { storageClient } from '@/lib/storage-client'
-import { useAccount } from 'wagmi'
+import { useAccount, useChainId, useSwitchChain } from 'wagmi'
 import { generateDeterministicKey, generateDeterministicNonce } from '@/lib/crypto-utils'
-import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '@/lib/flow-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES, flowEvmTestnet } from '@/lib/flow-config'
 import { useOracleStatus, useWatchOracleEvents } from '@/lib/contracts/hooks/useOracle'
 
 interface CommitStep {
@@ -79,6 +79,8 @@ function CommitContent() {
   const searchParams = useSearchParams()
   const marketId = searchParams.get('market')
   const { address } = useAccount()
+  const chainId = useChainId()
+  const { switchChain } = useSwitchChain()
   
   const [currentStep, setCurrentStep] = useState(0)
   const [formData, setFormData] = useState({
@@ -95,6 +97,12 @@ function CommitContent() {
   const [buyerAddress, setBuyerAddress] = useState<string | null>(null)
   const [verificationScore, setVerificationScore] = useState<number | null>(null)
   const [payoutAmount, setPayoutAmount] = useState<string | null>(null)
+  useEffect(() => {
+    // Ensure Flow EVM is the active chain when user lands here
+    if (typeof window !== 'undefined' && (window as any).ethereum && chainId && chainId !== flowEvmTestnet.id) {
+      switchChain({ chainId: flowEvmTestnet.id }).catch(() => {})
+    }
+  }, [chainId, switchChain])
 
   // Contract hooks
   const commitTask = useCommitTask()

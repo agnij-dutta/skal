@@ -3,7 +3,7 @@
 import { useWriteContract, useReadContract, useWaitForTransactionReceipt } from 'wagmi'
 import { parseEther } from 'viem'
 import { ESCROW_MANAGER_ABI } from '../abis/escrowManager'
-import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '../../flow-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES, flowEvmTestnet } from '../../flow-config'
 
 const ESCROW_MANAGER_ADDRESS = CONTRACT_ADDRESSES.ESCROW_MANAGER as `0x${string}`
 
@@ -33,6 +33,7 @@ export function useLockFunds() {
       functionName: 'lockFunds',
       args: [BigInt(taskId)],
       value,
+      chainId: flowEvmTestnet.id,
     })
   }
 
@@ -63,6 +64,7 @@ export function useReleaseFunds() {
       abi: ESCROW_MANAGER_ABI,
       functionName: 'releaseFunds',
       args: [BigInt(taskId), provider, validationScore],
+      chainId: flowEvmTestnet.id,
     })
   }
 
@@ -89,6 +91,7 @@ export function useRefundFunds() {
       abi: ESCROW_MANAGER_ABI,
       functionName: 'refundFunds',
       args: [BigInt(taskId)],
+      chainId: flowEvmTestnet.id,
     })
   }
 
@@ -115,6 +118,7 @@ export function useInitiateDispute() {
       abi: ESCROW_MANAGER_ABI,
       functionName: 'initiateDispute',
       args: [BigInt(taskId)],
+      chainId: flowEvmTestnet.id,
     })
   }
 
@@ -141,6 +145,7 @@ export function useResolveDispute() {
       abi: ESCROW_MANAGER_ABI,
       functionName: 'resolveDispute',
       args: [BigInt(taskId), providerWins],
+      chainId: flowEvmTestnet.id,
     })
   }
 

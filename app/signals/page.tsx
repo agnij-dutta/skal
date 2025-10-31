@@ -299,11 +299,11 @@ function SignalsContent() {
   }
 
   const handleViewData = async (signal: Signal) => {
-    setCurrentViewingSignal(signal)
+    // Use the automatic viewer that attempts deterministic decryption
     setRevealedData(null)
     setDecryptionKey('')
     setDecryptionNonce('')
-    setShowRevealModal(true)
+    await openViewerForTask(signal.taskId)
   }
 
   const handleDecryptData = async () => {

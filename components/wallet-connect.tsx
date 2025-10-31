@@ -29,6 +29,18 @@ export function WalletConnect({ className }: WalletConnectProps) {
     try {
       // First switch to Flow EVM
       try {
+        // Ensure correct metadata (FLOW symbol) even if an old entry exists
+        await (window as any).ethereum?.request({
+          method: 'wallet_updateEthereumChain',
+          params: [{
+            chainId: `0x${flowEvmTestnet.id.toString(16)}`,
+            chainName: flowEvmTestnet.name,
+            nativeCurrency: flowEvmTestnet.nativeCurrency,
+            rpcUrls: flowEvmTestnet.rpcUrls.default.http,
+            blockExplorerUrls: flowEvmTestnet.blockExplorers?.default?.url ? [flowEvmTestnet.blockExplorers.default.url] : [],
+          }],
+        }).catch(() => {})
+
         await switchChain({ chainId: flowEvmTestnet.id })
       } catch (switchError: any) {
         // If the chain doesn't exist, add it

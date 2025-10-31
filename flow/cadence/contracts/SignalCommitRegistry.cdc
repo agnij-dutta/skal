@@ -1,36 +1,64 @@
 import "FlowToken"
-import "FlowTransactionScheduler"
-import "FlowTransactionSchedulerUtils"
 
 /// SignalCommitRegistry manages commit-reveal cycles for AI intelligence signals (tasks)
 /// Integrates with Flow Scheduled Transactions for auto-reveal functionality
 access(all) contract SignalCommitRegistry {
     
     // Signal states
-    access(all) enum SignalState {
-        Committed
-        Revealed
-        Validated
-        Settled
-        Disputed
-        Cancelled
+    access(all) enum SignalState: UInt8 {
+        access(all) case Committed
+        access(all) case Revealed
+        access(all) case Validated
+        access(all) case Settled
+        access(all) case Disputed
+        access(all) case Cancelled
     }
     
     // Signal structure
     access(all) struct Signal {
-        signalId: UInt64
-        commitHash: String  // SHA3-256 hash of (provider + signalData + salt)
-        provider: Address
-        marketId: UInt64
-        stake: UFix64
-        timestamp: UFix64
-        state: SignalState
-        cid: String?  // IPFS CID for revealed data
-        validationScore: UInt8?
-        verifier: Address?
-        revealDeadline: UFix64
-        validationDeadline: UFix64?
-        scheduledTxId: UInt64?  // Scheduled transaction ID for auto-reveal
+        access(all) let signalId: UInt64
+        access(all) let commitHash: String
+        access(all) let provider: Address
+        access(all) let marketId: UInt64
+        access(all) let stake: UFix64
+        access(all) let timestamp: UFix64
+        access(all) var state: SignalState
+        access(all) var cid: String?
+        access(all) var validationScore: UInt8?
+        access(all) var verifier: Address?
+        access(all) let revealDeadline: UFix64
+        access(all) var validationDeadline: UFix64?
+        access(all) var scheduledTxId: UInt64?
+
+        init(
+            signalId: UInt64,
+            commitHash: String,
+            provider: Address,
+            marketId: UInt64,
+            stake: UFix64,
+            timestamp: UFix64,
+            state: SignalState,
+            cid: String?,
+            validationScore: UInt8?,
+            verifier: Address?,
+            revealDeadline: UFix64,
+            validationDeadline: UFix64?,
+            scheduledTxId: UInt64?
+        ) {
+            self.signalId = signalId
+            self.commitHash = commitHash
+            self.provider = provider
+            self.marketId = marketId
+            self.stake = stake
+            self.timestamp = timestamp
+            self.state = state
+            self.cid = cid
+            self.validationScore = validationScore
+            self.verifier = verifier
+            self.revealDeadline = revealDeadline
+            self.validationDeadline = validationDeadline
+            self.scheduledTxId = scheduledTxId
+        }
     }
     
     // Events
@@ -91,12 +119,11 @@ access(all) contract SignalCommitRegistry {
     access(all) fun commitSignal(
         commitHash: String,
         marketId: UInt64,
-        stake: UFix64
+        stake: UFix64,
+        provider: Address
     ): UInt64 {
-        pre {
-            stake >= self.MIN_STAKE: "Stake must be at least MIN_STAKE"
-            stake > 0.0: "Stake must be greater than 0"
-        }
+        assert(stake >= self.MIN_STAKE, message: "Stake must be at least MIN_STAKE")
+        assert(stake > 0.0, message: "Stake must be greater than 0")
         
         let signalId = self.nextSignalId
         self.nextSignalId = self.nextSignalId + 1
@@ -107,7 +134,7 @@ access(all) contract SignalCommitRegistry {
         let signal = Signal(
             signalId: signalId,
             commitHash: commitHash,
-            provider: self.getAccountCaller(),
+            provider: provider,
             marketId: marketId,
             stake: stake,
             timestamp: currentTime,
@@ -123,21 +150,21 @@ access(all) contract SignalCommitRegistry {
         self.signals[signalId] = signal
         
         // Track by provider
-        if self.providerSignals[self.getAccountCaller()] == nil {
-            self.providerSignals[self.getAccountCaller()] = []
+        if self.providerSignals[provider] == nil {
+            self.providerSignals[provider] = []
         }
-        self.providerSignals[self.getAccountCaller()]?.append(signalId)
+        self.providerSignals[provider]!.append(signalId)
         
         // Track by market
         if self.marketSignals[marketId] == nil {
             self.marketSignals[marketId] = []
         }
-        self.marketSignals[marketId]?.append(signalId)
+        self.marketSignals[marketId]!.append(signalId)
         
         emit SignalCommitted(
             signalId: signalId,
             commitHash: commitHash,
-            provider: self.getAccountCaller(),
+            provider: provider,
             marketId: marketId,
             stake: stake,
             timestamp: currentTime
@@ -148,22 +175,31 @@ access(all) contract SignalCommitRegistry {
     
     /// Reveal signal data (CID) that matches the committed hash
     access(all) fun revealSignal(signalId: UInt64, cid: String, revealedData: String): Bool {
-        pre {
-            self.signals[signalId] != nil: "Signal does not exist"
-        }
+        assert(self.signals[signalId] != nil, message: "Signal does not exist")
         
-        let signal = &self.signals[signalId] as &Signal
-        pre {
-            signal.state == SignalState.Committed: "Signal must be in Committed state"
-            self.getCurrentBlockTimestamp() <= signal.revealDeadline: "Reveal deadline passed"
-        }
+        let signal = self.signals[signalId]!
+        assert(signal.state == SignalState.Committed, message: "Signal must be in Committed state")
+        assert(self.getCurrentBlockTimestamp() <= signal.revealDeadline, message: "Reveal deadline passed")
         
         // In production, verify: hash(provider + revealedData + salt) == commitHash
         // For now, accept any CID during reveal window
         
-        signal.cid = cid
-        signal.state = SignalState.Revealed
-        signal.validationDeadline = self.getCurrentBlockTimestamp() + self.VALIDATION_WINDOW
+        let updated = Signal(
+            signalId: signal.signalId,
+            commitHash: signal.commitHash,
+            provider: signal.provider,
+            marketId: signal.marketId,
+            stake: signal.stake,
+            timestamp: signal.timestamp,
+            state: SignalState.Revealed,
+            cid: cid,
+            validationScore: signal.validationScore,
+            verifier: signal.verifier,
+            revealDeadline: signal.revealDeadline,
+            validationDeadline: self.getCurrentBlockTimestamp() + self.VALIDATION_WINDOW,
+            scheduledTxId: signal.scheduledTxId
+        )
+        self.signals[signalId] = updated
         
         emit SignalRevealed(
             signalId: signalId,
@@ -175,26 +211,33 @@ access(all) contract SignalCommitRegistry {
     }
     
     /// Validate signal with score (called by verifiers)
-    access(all) fun validateSignal(signalId: UInt64, score: UInt8): Bool {
-        pre {
-            score <= 100: "Score must be between 0-100"
-            self.signals[signalId] != nil: "Signal does not exist"
-        }
-        
-        let signal = &self.signals[signalId] as &Signal
-        pre {
-            signal.state == SignalState.Revealed: "Signal must be revealed first"
-            signal.validationDeadline != nil: "Validation deadline not set"
-        }
-        
-        signal.validationScore = score
-        signal.verifier = self.getAccountCaller()
-        signal.state = SignalState.Validated
+    access(all) fun validateSignal(signalId: UInt64, score: UInt8, verifier: Address): Bool {
+        assert(score <= 100, message: "Score must be between 0-100")
+        assert(self.signals[signalId] != nil, message: "Signal does not exist")
+        let signal = self.signals[signalId]!
+        assert(signal.state == SignalState.Revealed, message: "Signal must be revealed first")
+        assert(signal.validationDeadline != nil, message: "Validation deadline not set")
+        let updatedVal = Signal(
+            signalId: signal.signalId,
+            commitHash: signal.commitHash,
+            provider: signal.provider,
+            marketId: signal.marketId,
+            stake: signal.stake,
+            timestamp: signal.timestamp,
+            state: SignalState.Validated,
+            cid: signal.cid,
+            validationScore: score,
+            verifier: verifier,
+            revealDeadline: signal.revealDeadline,
+            validationDeadline: signal.validationDeadline,
+            scheduledTxId: signal.scheduledTxId
+        )
+        self.signals[signalId] = updatedVal
         
         emit SignalValidated(
             signalId: signalId,
             score: score,
-            verifier: self.getAccountCaller(),
+            verifier: verifier,
             timestamp: self.getCurrentBlockTimestamp()
         )
         
@@ -203,16 +246,26 @@ access(all) contract SignalCommitRegistry {
     
     /// Settle signal (release funds) after validation
     access(all) fun settleSignal(signalId: UInt64): Bool {
-        pre {
-            self.signals[signalId] != nil: "Signal does not exist"
-        }
+        assert(self.signals[signalId] != nil, message: "Signal does not exist")
         
-        let signal = &self.signals[signalId] as &Signal
-        pre {
-            signal.state == SignalState.Validated: "Signal must be validated"
-        }
-        
-        signal.state = SignalState.Settled
+        let signal = self.signals[signalId]!
+        assert(signal.state == SignalState.Validated, message: "Signal must be validated")
+        let updatedSettle = Signal(
+            signalId: signal.signalId,
+            commitHash: signal.commitHash,
+            provider: signal.provider,
+            marketId: signal.marketId,
+            stake: signal.stake,
+            timestamp: signal.timestamp,
+            state: SignalState.Settled,
+            cid: signal.cid,
+            validationScore: signal.validationScore,
+            verifier: signal.verifier,
+            revealDeadline: signal.revealDeadline,
+            validationDeadline: signal.validationDeadline,
+            scheduledTxId: signal.scheduledTxId
+        )
+        self.signals[signalId] = updatedSettle
         
         emit SignalSettled(
             signalId: signalId,
@@ -225,18 +278,29 @@ access(all) contract SignalCommitRegistry {
     }
     
     /// Auto-reveal called by Scheduled Transaction
-    access(FlowTransactionScheduler.Execute) fun autoReveal(signalId: UInt64) {
-        pre {
-            self.signals[signalId] != nil: "Signal does not exist"
-        }
+    access(all) fun autoReveal(signalId: UInt64) {
+        assert(self.signals[signalId] != nil, message: "Signal does not exist")
         
-        let signal = &self.signals[signalId] as &Signal
+        let signal = self.signals[signalId]!
         if signal.state == SignalState.Committed {
             // Force reveal with placeholder data if provider didn't reveal
             // This prevents stake from being locked indefinitely
-            signal.state = SignalState.Revealed
-            signal.cid = ""  // Empty CID indicates forced reveal
-            signal.validationDeadline = self.getCurrentBlockTimestamp() + self.VALIDATION_WINDOW
+            let forced = Signal(
+                signalId: signal.signalId,
+                commitHash: signal.commitHash,
+                provider: signal.provider,
+                marketId: signal.marketId,
+                stake: signal.stake,
+                timestamp: signal.timestamp,
+                state: SignalState.Revealed,
+                cid: "",
+                validationScore: signal.validationScore,
+                verifier: signal.verifier,
+                revealDeadline: signal.revealDeadline,
+                validationDeadline: self.getCurrentBlockTimestamp() + self.VALIDATION_WINDOW,
+                scheduledTxId: signal.scheduledTxId
+            )
+            self.signals[signalId] = forced
             
             emit SignalRevealed(
                 signalId: signalId,
@@ -266,8 +330,5 @@ access(all) contract SignalCommitRegistry {
         return getCurrentBlock().timestamp
     }
     
-    /// Helper: get caller account address
-    access(all) fun getAccountCaller(): Address {
-        return self.owner?.address ?? panic("Cannot get caller")
-    }
+    // No implicit caller in Cadence contract context
 }

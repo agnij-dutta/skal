@@ -3,26 +3,52 @@ import "FlowToken"
 /// AgentCoordinator - Manages agent registration and reputation tracking
 access(all) contract AgentCoordinator {
     
-    access(all) enum AgentType {
-        Provider
-        Buyer
-        Verifier
-        LP
-        Oracle
+    access(all) enum AgentType: UInt8 {
+        access(all) case Provider
+        access(all) case Buyer
+        access(all) case Verifier
+        access(all) case LP
+        access(all) case Oracle
     }
     
     access(all) struct Agent {
-        agentId: UInt64
-        agentAddress: Address
-        agentType: AgentType
-        name: String
-        description: String
-        stake: UFix64
-        registeredAt: UFix64
-        lastActivity: UFix64
-        reputation: UFix64  // 0-100
-        totalTasks: UInt64
-        successfulTasks: UInt64
+        access(all) let agentId: UInt64
+        access(all) let agentAddress: Address
+        access(all) let agentType: AgentType
+        access(all) let name: String
+        access(all) let description: String
+        access(all) let stake: UFix64
+        access(all) let registeredAt: UFix64
+        access(all) var lastActivity: UFix64
+        access(all) var reputation: UFix64
+        access(all) var totalTasks: UInt64
+        access(all) var successfulTasks: UInt64
+
+        init(
+            agentId: UInt64,
+            agentAddress: Address,
+            agentType: AgentType,
+            name: String,
+            description: String,
+            stake: UFix64,
+            registeredAt: UFix64,
+            lastActivity: UFix64,
+            reputation: UFix64,
+            totalTasks: UInt64,
+            successfulTasks: UInt64
+        ) {
+            self.agentId = agentId
+            self.agentAddress = agentAddress
+            self.agentType = agentType
+            self.name = name
+            self.description = description
+            self.stake = stake
+            self.registeredAt = registeredAt
+            self.lastActivity = lastActivity
+            self.reputation = reputation
+            self.totalTasks = totalTasks
+            self.successfulTasks = successfulTasks
+        }
     }
     
     access(all) event AgentRegistered(
@@ -63,10 +89,8 @@ access(all) contract AgentCoordinator {
         description: String,
         stake: UFix64
     ): UInt64 {
-        pre {
-            stake >= self.MIN_STAKE: "Stake must be at least MIN_STAKE"
-            self.addressToAgentId[agentAddress] == nil: "Agent already registered"
-        }
+        assert(stake >= self.MIN_STAKE, message: "Stake must be at least MIN_STAKE")
+        assert(self.addressToAgentId[agentAddress] == nil, message: "Agent already registered")
         
         let agentId = self.nextAgentId
         self.nextAgentId = self.nextAgentId + 1
@@ -108,7 +132,7 @@ access(all) contract AgentCoordinator {
     /// Update agent activity timestamp
     access(all) fun updateActivity(agentId: UInt64): Bool {
         if let agent = &self.agents[agentId] as &Agent? {
-            agent?.lastActivity = self.getCurrentBlockTimestamp()
+            agent.lastActivity = self.getCurrentBlockTimestamp()
             return true
         }
         return false

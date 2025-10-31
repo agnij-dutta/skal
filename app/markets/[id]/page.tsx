@@ -163,7 +163,7 @@ export default function MarketDetailPage() {
       { type: 'buy' as const, timestamp: '5m ago', user: '0xabcd...efgh', amount: '0.08 FLOW' },
       { type: 'reveal' as const, timestamp: '8m ago', user: '0x1234...5678' },
       { type: 'verify' as const, timestamp: '10m ago', user: 'Verifier #1' },
-      { type: 'commit' as const, timestamp: '15m ago', user: '0x9876...5432', amount: '0.05 STT' },
+      { type: 'commit' as const, timestamp: '15m ago', user: '0x9876...5432', amount: '0.05 FLOW' },
     ]
 
     // Mock top providers (would come from reputation data in real app)

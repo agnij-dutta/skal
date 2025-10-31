@@ -6,22 +6,42 @@ import "SignalCommitRegistry"
 /// Integrates with Flow Actions for automated fund handling
 access(all) contract SignalEscrow {
     
-    access(all) enum EscrowState {
-        Locked
-        Released
-        Disputed
-        Refunded
+    access(all) enum EscrowState: UInt8 {
+        access(all) case Locked
+        access(all) case Released
+        access(all) case Disputed
+        access(all) case Refunded
     }
     
     access(all) struct Escrow {
-        signalId: UInt64
-        buyer: Address
-        provider: Address
-        amount: UFix64
-        timestamp: UFix64
-        state: EscrowState
-        disputeDeadline: UFix64?
-        disputer: Address?
+        access(all) let signalId: UInt64
+        access(all) let buyer: Address
+        access(all) let provider: Address
+        access(all) let amount: UFix64
+        access(all) let timestamp: UFix64
+        access(all) var state: EscrowState
+        access(all) var disputeDeadline: UFix64?
+        access(all) var disputer: Address?
+
+        init(
+            signalId: UInt64,
+            buyer: Address,
+            provider: Address,
+            amount: UFix64,
+            timestamp: UFix64,
+            state: EscrowState,
+            disputeDeadline: UFix64?,
+            disputer: Address?
+        ) {
+            self.signalId = signalId
+            self.buyer = buyer
+            self.provider = provider
+            self.amount = amount
+            self.timestamp = timestamp
+            self.state = state
+            self.disputeDeadline = disputeDeadline
+            self.disputer = disputer
+        }
     }
     
     access(all) event FundsLocked(
@@ -70,16 +90,15 @@ access(all) contract SignalEscrow {
     access(all) fun lockFunds(
         signalId: UInt64,
         provider: Address,
-        amount: UFix64
+        amount: UFix64,
+        buyer: Address
     ): Bool {
-        pre {
-            amount >= self.MIN_ESCROW_AMOUNT: "Amount must be at least MIN_ESCROW_AMOUNT"
-            self.escrows[signalId] == nil: "Escrow already exists for this signal"
-        }
+        assert(amount >= self.MIN_ESCROW_AMOUNT, message: "Amount must be at least MIN_ESCROW_AMOUNT")
+        assert(self.escrows[signalId] == nil, message: "Escrow already exists for this signal")
         
         let escrow = Escrow(
             signalId: signalId,
-            buyer: self.getAccountCaller(),
+            buyer: buyer,
             provider: provider,
             amount: amount,
             timestamp: self.getCurrentBlockTimestamp(),
@@ -91,10 +110,10 @@ access(all) contract SignalEscrow {
         self.escrows[signalId] = escrow
         
         // Track by buyer
-        if self.buyerEscrows[self.getAccountCaller()] == nil {
-            self.buyerEscrows[self.getAccountCaller()] = []
+        if self.buyerEscrows[buyer] == nil {
+            self.buyerEscrows[buyer] = []
         }
-        self.buyerEscrows[self.getAccountCaller()]?.append(signalId)
+        self.buyerEscrows[buyer]!.append(signalId)
         
         // Track by provider
         if self.providerEscrows[provider] == nil {
@@ -104,7 +123,7 @@ access(all) contract SignalEscrow {
         
         emit FundsLocked(
             signalId: signalId,
-            buyer: self.getAccountCaller(),
+            buyer: buyer,
             provider: provider,
             amount: amount,
             timestamp: self.getCurrentBlockTimestamp()
@@ -115,16 +134,10 @@ access(all) contract SignalEscrow {
     
     /// Release funds to provider after successful validation
     access(all) fun releaseFunds(signalId: UInt64): Bool {
-        pre {
-            self.escrows[signalId] != nil: "Escrow does not exist"
-        }
+        assert(self.escrows[signalId] != nil, message: "Escrow does not exist")
         
-        let escrow = &self.escrows[signalId] as &Escrow
-        pre {
-            escrow.state == EscrowState.Locked: "Funds must be in Locked state"
-        }
-        
-        escrow.state = EscrowState.Released
+        let escrow = self.escrows[signalId]!
+        assert(escrow.state == EscrowState.Locked, message: "Funds must be in Locked state")
         
         emit FundsReleased(
             signalId: signalId,
@@ -132,22 +145,27 @@ access(all) contract SignalEscrow {
             amount: escrow.amount,
             timestamp: self.getCurrentBlockTimestamp()
         )
+        let updatedReleased = Escrow(
+            signalId: escrow.signalId,
+            buyer: escrow.buyer,
+            provider: escrow.provider,
+            amount: escrow.amount,
+            timestamp: escrow.timestamp,
+            state: EscrowState.Released,
+            disputeDeadline: escrow.disputeDeadline,
+            disputer: escrow.disputer
+        )
+        self.escrows[signalId] = updatedReleased
         
         return true
     }
     
     /// Refund funds to buyer (e.g., validation failed or timeout)
     access(all) fun refundFunds(signalId: UInt64): Bool {
-        pre {
-            self.escrows[signalId] != nil: "Escrow does not exist"
-        }
+        assert(self.escrows[signalId] != nil, message: "Escrow does not exist")
         
-        let escrow = &self.escrows[signalId] as &Escrow
-        pre {
-            escrow.state == EscrowState.Locked: "Funds must be in Locked state"
-        }
-        
-        escrow.state = EscrowState.Refunded
+        let escrow = self.escrows[signalId]!
+        assert(escrow.state == EscrowState.Locked, message: "Funds must be in Locked state")
         
         emit FundsRefunded(
             signalId: signalId,
@@ -155,6 +173,17 @@ access(all) contract SignalEscrow {
             amount: escrow.amount,
             timestamp: self.getCurrentBlockTimestamp()
         )
+        let updatedRefunded = Escrow(
+            signalId: escrow.signalId,
+            buyer: escrow.buyer,
+            provider: escrow.provider,
+            amount: escrow.amount,
+            timestamp: escrow.timestamp,
+            state: EscrowState.Refunded,
+            disputeDeadline: escrow.disputeDeadline,
+            disputer: escrow.disputer
+        )
+        self.escrows[signalId] = updatedRefunded
         
         return true
     }
@@ -178,7 +207,5 @@ access(all) contract SignalEscrow {
         return getCurrentBlock().timestamp
     }
     
-    access(all) fun getAccountCaller(): Address {
-        return self.owner?.address ?? panic("Cannot get caller")
-    }
+    // No implicit caller in Cadence contract context
 }

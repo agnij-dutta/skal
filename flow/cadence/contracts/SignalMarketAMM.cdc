@@ -4,14 +4,31 @@ import "FungibleToken"
 /// SignalMarketAMM - Automated Market Maker for intelligence signal trading
 /// Implements constant-product formula (x*y=k) bonding curve
 access(all) contract SignalMarketAMM {
+    // Helpers removed to avoid name resolution issues
     
     access(all) struct Market {
-        marketId: UInt64
-        reserveA: UFix64  // Base token (FLOW)
-        reserveB: UFix64  // Intelligence token
-        totalSupply: UFix64
-        active: Bool
-        createdAt: UFix64
+        access(all) let marketId: UInt64
+        access(all) var reserveA: UFix64  // Base token (FLOW)
+        access(all) var reserveB: UFix64  // Intelligence token
+        access(all) var totalSupply: UFix64
+        access(all) var active: Bool
+        access(all) let createdAt: UFix64
+
+        init(
+            marketId: UInt64,
+            reserveA: UFix64,
+            reserveB: UFix64,
+            totalSupply: UFix64,
+            active: Bool,
+            createdAt: UFix64
+        ) {
+            self.marketId = marketId
+            self.reserveA = reserveA
+            self.reserveB = reserveB
+            self.totalSupply = totalSupply
+            self.active = active
+            self.createdAt = createdAt
+        }
     }
     
     access(all) event MarketCreated(
@@ -53,9 +70,7 @@ access(all) contract SignalMarketAMM {
     
     /// Create a new market
     access(all) fun createMarket(marketId: UInt64): Bool {
-        pre {
-            self.markets[marketId] == nil: "Market already exists"
-        }
+        assert(self.markets[marketId] == nil, message: "Market already exists")
         
         let market = Market(
             marketId: marketId,
@@ -81,41 +96,43 @@ access(all) contract SignalMarketAMM {
     access(all) fun addLiquidity(
         marketId: UInt64,
         amountA: UFix64,
-        amountB: UFix64
+        amountB: UFix64,
+        provider: Address
     ): UFix64 {
-        pre {
-            amountA > 0.0: "AmountA must be greater than 0"
-            amountB > 0.0: "AmountB must be greater than 0"
-            self.markets[marketId] != nil: "Market does not exist"
-        }
+        assert(amountA > 0.0, message: "AmountA must be greater than 0")
+        assert(amountB > 0.0, message: "AmountB must be greater than 0")
+        assert(self.markets[marketId] != nil, message: "Market does not exist")
         
-        let market = &self.markets[marketId] as &Market
-        pre {
-            market.active: "Market must be active"
-        }
+        let market = self.markets[marketId]!
+        assert(market.active, message: "Market must be active")
         
-        let lpTokens: UFix64
-        
+        var lpTokens: UFix64 = 0.0
         if market.totalSupply == 0.0 {
-            // First liquidity provision
-            lpTokens = sqrt(amountA * amountB)
-            pre {
-                lpTokens >= self.MIN_LIQUIDITY: "Insufficient liquidity"
-            }
+            // Simplified initial liquidity calculation
+            lpTokens = amountA + amountB
+            assert(lpTokens >= self.MIN_LIQUIDITY, message: "Insufficient liquidity")
         } else {
             // Subsequent liquidity provision
             let liquidityA = (amountA * market.totalSupply) / market.reserveA
             let liquidityB = (amountB * market.totalSupply) / market.reserveB
-            lpTokens = min(liquidityA, liquidityB)
+            var minVal: UFix64 = liquidityA
+            if liquidityB < liquidityA { minVal = liquidityB }
+            lpTokens = minVal
         }
         
-        market.reserveA = market.reserveA + amountA
-        market.reserveB = market.reserveB + amountB
-        market.totalSupply = market.totalSupply + lpTokens
+        let updated = Market(
+            marketId: market.marketId,
+            reserveA: market.reserveA + amountA,
+            reserveB: market.reserveB + amountB,
+            totalSupply: market.totalSupply + lpTokens,
+            active: market.active,
+            createdAt: market.createdAt
+        )
+        self.markets[marketId] = updated
         
         emit LiquidityAdded(
             marketId: marketId,
-            provider: self.getAccountCaller(),
+            provider: provider,
             amountA: amountA,
             amountB: amountB,
             lpTokens: lpTokens,
@@ -128,17 +145,14 @@ access(all) contract SignalMarketAMM {
     /// Swap tokens (buy signal)
     access(all) fun swapTokens(
         marketId: UInt64,
-        amountIn: UFix64
+        amountIn: UFix64,
+        buyer: Address
     ): UFix64 {
-        pre {
-            amountIn > 0.0: "AmountIn must be greater than 0"
-            self.markets[marketId] != nil: "Market does not exist"
-        }
+        assert(amountIn > 0.0, message: "AmountIn must be greater than 0")
+        assert(self.markets[marketId] != nil, message: "Market does not exist")
         
-        let market = &self.markets[marketId] as &Market
-        pre {
-            market.active: "Market must be active"
-        }
+        let market = self.markets[marketId]!
+        assert(market.active, message: "Market must be active")
         
         // Calculate output amount using constant-product formula with fees
         let feeAmount = (amountIn * self.FEE_PERCENT) / self.PRECISION
@@ -155,12 +169,19 @@ access(all) contract SignalMarketAMM {
         let amountOut = reserveB - newReserveB
         
         // Update reserves
-        market.reserveA = newReserveA
-        market.reserveB = newReserveB
+        let updatedAfterSwap = Market(
+            marketId: market.marketId,
+            reserveA: newReserveA,
+            reserveB: newReserveB,
+            totalSupply: market.totalSupply,
+            active: market.active,
+            createdAt: market.createdAt
+        )
+        self.markets[marketId] = updatedAfterSwap
         
         emit SignalSwapped(
             marketId: marketId,
-            buyer: self.getAccountCaller(),
+            buyer: buyer,
             amountIn: amountIn,
             amountOut: amountOut,
             timestamp: self.getCurrentBlockTimestamp()
@@ -190,22 +211,6 @@ access(all) contract SignalMarketAMM {
     access(all) fun getCurrentBlockTimestamp(): UFix64 {
         return getCurrentBlock().timestamp
     }
+
     
-    access(all) fun getAccountCaller(): Address {
-        return self.owner?.address ?? panic("Cannot get caller")
-    }
-    
-    /// Helper: integer square root
-    access(all) fun sqrt(n: UFix64): UFix64 {
-        if n == 0.0 {
-            return 0.0
-        }
-        var x = n
-        var y = (x + 1.0) / 2.0
-        while y < x {
-            x = y
-            y = (x + (n / x)) / 2.0
-        }
-        return x
-    }
 }

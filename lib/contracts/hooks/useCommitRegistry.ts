@@ -4,7 +4,7 @@ import { useWriteContract, useReadContract, useWaitForTransactionReceipt } from 
 import { useMemo } from 'react'
 import { parseEther, encodeFunctionData } from 'viem'
 import { COMMIT_REGISTRY_ABI } from '../abis/commitRegistry'
-import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES } from '../../flow-config'
+import { CONTRACT_ADDRESSES_FLOW as CONTRACT_ADDRESSES, flowEvmTestnet } from '../../flow-config'
 
 const COMMIT_REGISTRY_ADDRESS = CONTRACT_ADDRESSES.COMMIT_REGISTRY as `0x${string}`
 
@@ -41,6 +41,7 @@ export function useCommitTask() {
       functionName: 'commitTask',
       args: [commitHash, BigInt(marketId), stake],
       value: stake,
+      chainId: flowEvmTestnet.id,
     })
   }
 
@@ -68,6 +69,7 @@ export function useRevealTask() {
       abi: COMMIT_REGISTRY_ABI,
       functionName: 'revealTask',
       args: [BigInt(taskId), cid],
+      chainId: flowEvmTestnet.id,
     })
   }
 
@@ -99,6 +101,7 @@ export function useFinalizeValidation() {
       abi: COMMIT_REGISTRY_ABI,
       functionName: 'finalizeValidation',
       args: [BigInt(taskId), score, verifier, signature],
+      chainId: flowEvmTestnet.id,
     })
   }
 

@@ -262,6 +262,20 @@ export class ProviderService extends BaseService {
       if (provider.toLowerCase() === this.wallet!.address.toLowerCase()) {
         this.logActivity(`🎯 This is our task! Revealing task ${taskIdNum}...`)
         await this.revealTask(taskIdNum)
+
+        // If Flow actions are configured and this task is Flow-backed, also trigger Cadence auto-reveal as redundancy
+        try {
+          // Heuristic: treat large IDs as Flow-backed; replace with registry lookup if available
+          const isFlowBacked = taskIdNum >= 1_000_000
+          // @ts-ignore orchestrator injected in BaseService
+          const flow = this.orchestrator?.flow
+          if (isFlowBacked && flow?.isEnabled()) {
+            this.logActivity(`Triggering Flow autoReveal for signal ${taskIdNum} via FlowActionsService`)
+            await flow.autoReveal(taskIdNum)
+          }
+        } catch (e:any) {
+          this.logActivity(`Flow autoReveal trigger failed (non-fatal): ${String(e?.message || e)}`)
+        }
       } else {
         this.logActivity(`⏭️ Task ${taskIdNum} belongs to different provider ${provider}, skipping`)
       }

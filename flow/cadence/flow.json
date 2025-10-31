@@ -1,0 +1,36 @@
+{
+  "accounts": {
+    "deployer": {
+      "address": "0xae8d45e9591b80cb",
+      "key": {
+        "type": "hex",
+        "index": 0,
+        "privateKey": "95492791d9e40b7771b8b57117c399cc5e27d99d4959b7f9592925a398be7bdb",
+        "signatureAlgorithm": "ECDSA_secp256k1",
+        "hashAlgorithm": "SHA3_256"
+      }
+    }
+  },
+  "contracts": {
+    "FungibleToken": { "aliases": { "testnet": "0x9a0766d93b6608b7" } },
+    "FlowToken": { "aliases": { "testnet": "0x7e60df042a9c0868" } },
+    "SignalCommitRegistry": "./contracts/SignalCommitRegistry.cdc",
+    "SignalEscrow": "./contracts/SignalEscrow.cdc",
+    "SignalMarketAMM": "./contracts/SignalMarketAMM.cdc",
+    "AgentCoordinator": "./contracts/AgentCoordinator.cdc"
+  },
+  "networks": {
+    "testnet": "access.devnet.nodes.onflow.org:9000"
+  },
+  "deployments": {
+    "testnet": {
+      "deployer": [
+        "SignalCommitRegistry",
+        "SignalEscrow",
+        "SignalMarketAMM"
+      ]
+    }
+  }
+}
+
+

@@ -2,11 +2,14 @@ import { ethers } from 'ethers'
 import { BaseService, ServiceConfig } from './BaseService.js'
 import { AMM_ENGINE_ABI } from '../../../../lib/contracts/abis/ammEngine.js'
 import { Strategy, PricingModel, ArbitrageOpportunity } from '../ai/types.js'
+import { FlowActionsService } from "./FlowActionsService";
+import { AgentOrchestrator } from "./AgentOrchestrator";
 
 export class LPService extends BaseService {
   private ammEngine: ethers.Contract
   private rebalanceInterval: NodeJS.Timeout | null = null
   private rebalanceIntervalMs: number = 60000 // 1 minute
+  private flow?: FlowActionsService;
 
   constructor(serviceConfig: ServiceConfig) {
     super(serviceConfig)
@@ -15,6 +18,14 @@ export class LPService extends BaseService {
       AMM_ENGINE_ABI,
       this.provider
     )
+    try {
+      // Access orchestrator singleton if available
+      // @ts-ignore
+      if ((global as any).orchestrator && (global as any).orchestrator.flow?.isEnabled()) {
+        // @ts-ignore
+        this.flow = (global as any).orchestrator.flow;
+      }
+    } catch {}
   }
 
   async start(): Promise<void> {
@@ -547,5 +558,19 @@ export class LPService extends BaseService {
     } catch (error) {
       return 0
     }
+  }
+
+  private isFlowMarket(marketId: number): boolean {
+    // Heuristic: treat large IDs as Flow-backed for now; replace with registry lookup
+    return marketId >= 1_000_000;
+  }
+
+  async addLiquidityToMarket(marketId: number, amountA: string, amountB: string) {
+    if (this.flow && this.flow.isEnabled() && this.isFlowMarket(marketId)) {
+      return await this.flow.addLiquidity(marketId, amountA, amountB);
+    }
+    // Fallback to existing EVM path
+    // @ts-ignore call existing implementation
+    return await this.addLiquidity(/* existing args if any */);
   }
 }

@@ -12,6 +12,7 @@ import { MarketIntelligence } from '../ai/MarketIntelligence.js'
 import { RiskManager } from '../ai/RiskManager.js'
 import { StrategyExecutor } from '../ai/StrategyExecutor.js'
 import { PerformanceMonitor } from '../ai/PerformanceMonitor.js'
+import { FlowActionsService } from "./FlowActionsService";
 
 dotenv.config()
 
@@ -55,6 +56,7 @@ export class AgentOrchestrator extends EventEmitter {
   private riskManager!: RiskManager
   private strategyExecutor!: StrategyExecutor
   private performanceMonitor!: PerformanceMonitor
+  public flow?: FlowActionsService;
 
   constructor(config: AgentConfig) {
     super()
@@ -168,6 +170,8 @@ export class AgentOrchestrator extends EventEmitter {
       aiEngine: this.aiEngine
     })
     
+    this.flow = new FlowActionsService();
+    
     console.log('✅ AI Infrastructure initialized')
   }
 
@@ -263,6 +267,19 @@ export class AgentOrchestrator extends EventEmitter {
 
   private async startServices(): Promise<void> {
     console.log('🏃 Starting agent services in parallel...')
+
+    // Add Forte automation service before starting all
+    try {
+      const { ForteAutomationService } = await import('./ForteAutomationService.js')
+      const forte = new ForteAutomationService({
+        provider: this.provider,
+        config: this.config,
+        orchestrator: this as any
+      })
+      this.services.set('forte-automation', forte)
+    } catch (e) {
+      console.error('❌ Failed to initialize forte-automation service:', e)
+    }
 
     const startPromises = Array.from(this.services.entries()).map(async ([name, service]) => {
       console.log(`Starting ${name} service...`)
