@@ -489,6 +489,39 @@ export class ProviderService extends BaseService {
       if (receipt) {
         const taskId = this.extractTaskIdFromLogs([...receipt.logs])
         this.logActivity(`Task confirmed in block ${receipt.blockNumber}`)
+        
+        // Schedule Flow auto-reveal if Flow Actions are enabled and task is Flow-backed
+        try {
+          const isFlowBacked = taskId >= 1_000_000 // Heuristic: large IDs are Flow-backed
+          // @ts-ignore orchestrator.flow is injected
+          const flow = this.orchestrator?.flow
+          if (isFlowBacked && flow?.isEnabled()) {
+            // Fetch task to get revealDeadline
+            const task = await this.commitRegistry.getTask(taskId)
+            if (task && task.revealDeadline) {
+              const currentBlock = await this.provider.getBlock('latest')
+              const currentTimestamp = currentBlock?.timestamp || Date.now() / 1000
+              const revealDeadline = Number(task.revealDeadline)
+              const delaySeconds = Math.max(0, Math.floor(revealDeadline - currentTimestamp))
+              
+              if (delaySeconds > 0) {
+                this.logActivity(`Scheduling Flow auto-reveal for task ${taskId} in ${delaySeconds} seconds`)
+                const scheduleResult = await flow.scheduleAutoReveal(taskId, delaySeconds)
+                if (scheduleResult?.ok) {
+                  this.logActivity(`✅ Scheduled Flow auto-reveal transaction: ${scheduleResult.res?.transactionId}`)
+                } else {
+                  this.logActivity(`⚠️ Flow scheduler failed (non-fatal): ${scheduleResult?.error}`)
+                }
+              } else {
+                this.logActivity(`⚠️ Reveal deadline already passed, skipping scheduler`)
+              }
+            }
+          }
+        } catch (e: any) {
+          // Non-fatal; task committed successfully
+          this.logActivity(`⚠️ Flow scheduler setup failed (non-fatal): ${String(e?.message || e)}`)
+        }
+        
         this.orchestrator.forwardEvent('taskCommitted', {
           taskId,
           commitHash,

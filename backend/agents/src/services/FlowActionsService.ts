@@ -91,6 +91,78 @@ export class FlowActionsService {
 		});
 	}
 
+	/**
+	 * Schedule an auto-reveal transaction using Flow Transaction Scheduler
+	 * @param signalId Signal ID to auto-reveal
+	 * @param delaySeconds Seconds to wait before executing (typically reveal deadline)
+	 */
+	async scheduleAutoReveal(signalId: number, delaySeconds: number) {
+		if (!this.enabled) return { ok: false, error: "FLOW not configured" };
+		const tx = `import FlowTransactionScheduler from 0x8c20400102010101
+			import AutoRevealHandler from ${this.address}
+			
+			transaction(signalId: UInt64, delaySeconds: UInt64) {
+				prepare(signer: AuthAccount) {
+					let scheduler = signer.borrow<&FlowTransactionScheduler.Scheduler>(from: FlowTransactionScheduler.SchedulerStoragePath)
+						?? panic("Scheduler not found")
+					
+					let handlerRef = signer.borrow<&AutoRevealHandler.Handler>(from: /storage/AutoRevealHandler)
+						?? panic("AutoRevealHandler not found")
+					
+					let data = AutoRevealHandler.AutoRevealData(signalId: signalId)
+					
+					scheduler.scheduleTransaction(
+						handler: handlerRef,
+						delay: delaySeconds,
+						data: data
+					)
+				}
+			}`;
+		return this.sendTx(tx, (ix: any) => {
+			ix.args([
+				{ value: String(signalId), xform: (v:any)=>({type:"UInt64", value: v}) },
+				{ value: String(delaySeconds), xform: (v:any)=>({type:"UInt64", value: v}) }
+			]);
+		});
+	}
+
+	/**
+	 * Schedule an auto-verification transaction using Flow Transaction Scheduler
+	 * @param signalId Signal ID to verify
+	 * @param score Validation score
+	 * @param delaySeconds Seconds to wait before executing
+	 */
+	async scheduleAutoVerification(signalId: number, score: number, delaySeconds: number) {
+		if (!this.enabled) return { ok: false, error: "FLOW not configured" };
+		const tx = `import FlowTransactionScheduler from 0x8c20400102010101
+			import AutoVerificationHandler from ${this.address}
+			
+			transaction(signalId: UInt64, score: UInt8, delaySeconds: UInt64) {
+				prepare(signer: AuthAccount) {
+					let scheduler = signer.borrow<&FlowTransactionScheduler.Scheduler>(from: FlowTransactionScheduler.SchedulerStoragePath)
+						?? panic("Scheduler not found")
+					
+					let handlerRef = signer.borrow<&AutoVerificationHandler.Handler>(from: /storage/AutoVerificationHandler)
+						?? panic("AutoVerificationHandler not found")
+					
+					let data = AutoVerificationHandler.VerificationData(signalId: signalId, score: score)
+					
+					scheduler.scheduleTransaction(
+						handler: handlerRef,
+						delay: delaySeconds,
+						data: data
+					)
+				}
+			}`;
+		return this.sendTx(tx, (ix: any) => {
+			ix.args([
+				{ value: String(signalId), xform: (v:any)=>({type:"UInt64", value: v}) },
+				{ value: String(score), xform: (v:any)=>({type:"UInt8", value: v}) },
+				{ value: String(delaySeconds), xform: (v:any)=>({type:"UInt64", value: v}) }
+			]);
+		});
+	}
+
 	private async sendTx(code: string, buildArgs: (ix: any)=>void) {
 		try {
 			const proposer = this.authorization();
