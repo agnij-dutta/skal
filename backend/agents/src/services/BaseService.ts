@@ -171,7 +171,7 @@ export abstract class BaseService extends EventEmitter {
                 args: parsedEvent.args,
                 event: parsedEvent.name,
                 eventSignature: parsedEvent.signature,
-                decode: parsedEvent.decode.bind(parsedEvent)
+                decode: () => parsedEvent.args
               }
               await handler(...args, mockEvent)
             } catch (error) {

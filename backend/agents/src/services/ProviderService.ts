@@ -98,27 +98,47 @@ export class ProviderService extends BaseService {
           // Check if task has been purchased (has funds locked)
           const task = await this.commitRegistry.getTask(taskId)
           
-          // If task exists and has been purchased but not revealed yet
-          if (task && !task.revealed) {
-            this.logActivity(`🔍 Found unrevealed task ${taskId} with CID ${cid}, checking if purchased...`)
-            
-            // Check if there are any funds locked for this task
-            // We'll reveal if the task exists and we have a CID for it
-            this.logActivity(`🎯 Revealing task ${taskId} with CID ${cid}`)
-            const success = await this.revealTask(taskId)
-            
-            // If revelation was successful, remove from pending list
-            if (success) {
-              this.taskCids.delete(taskId)
-              this.logActivity(`✅ Task ${taskId} revealed successfully, removed from pending list`)
-            }
-          } else if (task && task.revealed) {
-            // Task is already revealed, remove from pending list
+          if (!task) {
+            continue // Task doesn't exist yet
+          }
+          
+          // Check task state: 0=Committed, 1=Revealed, 2=Validated, 3=Settled
+          const taskState = Number(task.state || 0)
+          
+          // Check if task is already revealed (state 1 or has cid)
+          if (taskState >= 1 || (task.cid && task.cid.length > 0)) {
             this.taskCids.delete(taskId)
-            this.logActivity(`✅ Task ${taskId} already revealed, removed from pending list`)
+            this.logActivity(`✅ Task ${taskId} already revealed (state: ${taskState}), removed from pending list`)
+            continue
+          }
+          
+          // Check if funds are locked for this task
+          try {
+            const escrow = await this.escrowManager.getEscrow(taskId)
+            const escrowState = Number(escrow.state || 0)
+            
+            // Escrow state: 0=Locked, 1=Released, 2=Disputed, 3=Refunded
+            if (escrowState === 0) {
+              // Funds are locked, we should reveal
+              this.logActivity(`🔍 Found unrevealed task ${taskId} with CID ${cid}, funds locked - revealing...`)
+              const success = await this.revealTask(taskId)
+              
+              if (success) {
+                this.taskCids.delete(taskId)
+                this.logActivity(`✅ Task ${taskId} revealed successfully, removed from pending list`)
+              } else {
+                this.logActivity(`⚠️ Task ${taskId} reveal failed, will retry later`)
+              }
+            } else {
+              this.logActivity(`⏳ Task ${taskId} funds not yet locked (escrow state: ${escrowState}), waiting...`)
+            }
+          } catch (escrowError) {
+            // Escrow might not exist yet, wait for funds to be locked
+            this.logActivity(`⏳ Task ${taskId} escrow not found yet, waiting for buyer...`)
           }
         } catch (error) {
           // Task might not exist or error occurred, continue with next task
+          this.logActivity(`⚠️ Error checking task ${taskId}: ${(error as Error).message}`)
           continue
         }
       }
@@ -304,11 +324,15 @@ export class ProviderService extends BaseService {
       
       this.logActivity(`Using stored CID ${cid} for task ${taskId}`)
       
+      // Get current nonce to avoid conflicts
+      const nonce = await this.provider.getTransactionCount(this.wallet.address, 'pending')
+      
       const tx = await (this.commitRegistry.connect(this.wallet) as any).revealTask(
         BigInt(taskId),
         cid,
         {
-          gasLimit: 300000 // Increased gas limit
+          gasLimit: 300000,
+          nonce
         }
       )
 
@@ -475,13 +499,17 @@ export class ProviderService extends BaseService {
 
   private async commitTaskToBlockchain(commitHash: string, marketId: number, stake: bigint): Promise<number> {
     try {
+      // Get current nonce to avoid conflicts
+      const nonce = await this.provider.getTransactionCount(this.wallet!.address, 'pending')
+      
       const tx = await (this.commitRegistry.connect(this.wallet!) as any).commitTask(
         commitHash,
         BigInt(marketId),
         stake,
         {
           gasLimit: 4000000,
-          value: stake
+          value: stake,
+          nonce
         }
       )
 

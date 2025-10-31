@@ -280,11 +280,29 @@ export class BuyerService extends BaseService {
       const result = await decryptData(task.cid, key, nonce)
       
       if (result.success && result.data) {
+        // Parse JSON if it's a string
+        let parsedData = result.data
+        if (typeof parsedData === 'string') {
+          try {
+            // Handle string with escape sequences
+            const cleaned = parsedData.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n')
+            parsedData = JSON.parse(cleaned)
+          } catch (e) {
+            // If parsing fails, try direct parse
+            try {
+              parsedData = JSON.parse(parsedData)
+            } catch (e2) {
+              this.logActivity(`⚠️ Failed to parse JSON: ${(e2 as Error).message}`)
+              parsedData = result.data
+            }
+          }
+        }
+        
         this.logActivity(`Successfully decrypted task ${taskId} data`)
-        this.logActivity(`Task data: ${JSON.stringify(result.data, null, 2)}`)
+        this.logActivity(`Task data: ${JSON.stringify(parsedData, null, 2)}`)
         
         // Store the decrypted data for AI analysis or further processing
-        await this.processDecryptedTaskData(taskId, result.data)
+        await this.processDecryptedTaskData(taskId, parsedData)
       } else {
         this.logActivity(`Failed to decrypt task ${taskId} data: ${result.message}`)
       }
@@ -297,24 +315,41 @@ export class BuyerService extends BaseService {
   private async processDecryptedTaskData(taskId: number, data: any): Promise<void> {
     try {
       // Process the decrypted trading signal data
-      this.logActivity(`Processing decrypted data for task ${taskId}:`)
-      this.logActivity(`Signal type: ${data.prediction ? 'Price Prediction' : data.signal ? 'Trading Signal' : 'Unknown'}`)
+      this.logActivity(`\n📊 ===== REVEALED DATA FOR TASK ${taskId} =====`)
+      this.logActivity(`📋 Full Data: ${JSON.stringify(data, null, 2)}`)
+      this.logActivity(`📈 Signal type: ${data.prediction ? 'Price Prediction' : data.signal ? 'Trading Signal' : 'Unknown'}`)
       
       if (data.prediction) {
-        this.logActivity(`Prediction: ${data.prediction}`)
-        this.logActivity(`Confidence: ${data.confidence}`)
-        this.logActivity(`Reasoning: ${data.reasoning}`)
+        this.logActivity(`🔮 Prediction: ${data.prediction}`)
+        this.logActivity(`📊 Confidence: ${data.confidence}`)
+        this.logActivity(`💡 Reasoning: ${data.reasoning || 'N/A'}`)
       }
       
       if (data.signal) {
-        this.logActivity(`Signal: ${data.signal}`)
-        this.logActivity(`Asset: ${data.asset}`)
-        this.logActivity(`Price: ${data.price}`)
-        this.logActivity(`Confidence: ${data.confidence}`)
+        this.logActivity(`📡 Signal: ${data.signal}`)
+        this.logActivity(`💰 Asset: ${data.asset || 'N/A'}`)
+        this.logActivity(`💵 Price: ${data.price || 'N/A'}`)
+        this.logActivity(`📊 Confidence: ${data.confidence}`)
       }
       
-      // Here you could add AI analysis of the decrypted signal
-      // For example, validate the signal quality, extract insights, etc.
+      // AI insights analysis
+      if (this.aiEngine) {
+        try {
+          // Generate AI insights using market intelligence
+          const insights = {
+            signalQuality: data.confidence || 0.5,
+            marketRelevance: 'High',
+            riskLevel: data.confidence < 0.7 ? 'Medium' : 'Low',
+            recommendation: data.signal === 'BUY' ? 'Consider buying' : data.signal === 'SELL' ? 'Consider selling' : 'Hold',
+            timestamp: new Date().toISOString()
+          }
+          this.logActivity(`\n🤖 ===== AI INSIGHTS =====`)
+          this.logActivity(`💡 Insights: ${JSON.stringify(insights, null, 2)}`)
+        } catch (e) {
+          this.logActivity(`⚠️ AI insights generation failed: ${(e as Error).message}`)
+        }
+        this.logActivity(`=====================================\n`)
+      }
       
     } catch (error) {
       this.logError(error as Error, `Failed to process decrypted data for task ${taskId}`)

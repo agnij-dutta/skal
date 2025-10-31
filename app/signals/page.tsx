@@ -27,6 +27,7 @@ import {
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { useLockFunds, useGetReputation, useGetActiveAgentsByType, useWatchCommitRegistryEvents, useWatchEscrowManagerEvents, useGetTask } from '@/lib/contracts/hooks'
+import { useGetBuyerEscrows } from '@/lib/contracts/hooks/useEscrowManager'
 import { decryptData, fetchFromIPFS, storageClient } from '@/lib/storage-client'
 import { useSignals, useUserSignals, useAvailableSignals, useVerifiedSignals } from '@/lib/contracts/hooks/useSignals'
 import { useUserSignalsContext } from '@/lib/contexts/UserSignalsContext'
@@ -108,7 +109,44 @@ function SignalsContent() {
   const { signals: verifiedSignals } = useVerifiedSignals()
   
   // Get user's purchased signals from context
-  const { purchasedSignals: userSignals } = useUserSignalsContext()
+  const { purchasedSignals: userSignals, addPurchasedSignal } = useUserSignalsContext()
+  
+  // Fetch escrows for this buyer to detect agent purchases
+  const { taskIds: buyerTaskIds } = useGetBuyerEscrows(address as `0x${string}` | undefined)
+  
+  // Auto-add agent purchases from escrow on mount
+  useEffect(() => {
+    if (buyerTaskIds && buyerTaskIds.length > 0 && allSignals.length > 0) {
+      buyerTaskIds.forEach((taskIdBigInt) => {
+        const taskId = Number(taskIdBigInt)
+        const signalId = `task-${taskId}`
+        
+        // Check if already in purchased signals
+        const alreadyPurchased = purchasedSignals.find(s => s.id === signalId)
+        if (alreadyPurchased) return
+        
+        // Find signal in all signals
+        const existingSignal = allSignals.find(s => s.taskId === taskId)
+        if (existingSignal) {
+          addPurchasedSignal({
+            id: signalId,
+            taskId,
+            marketId: existingSignal.marketId,
+            marketName: existingSignal.marketName,
+            provider: existingSignal.provider,
+            providerReputation: existingSignal.providerReputation,
+            description: existingSignal.description,
+            price: existingSignal.price,
+            stake: existingSignal.stake,
+            commitTime: existingSignal.commitTime,
+            status: 'locked',
+            category: existingSignal.category,
+            cid: existingSignal.cid,
+          })
+        }
+      })
+    }
+  }, [buyerTaskIds, allSignals, purchasedSignals, addPurchasedSignal])
 
   // Show success toast when transaction is confirmed
   useEffect(() => {
@@ -118,8 +156,45 @@ function SignalsContent() {
   }, [lockFunds.isConfirmed, lockFunds.hash])
 
   // Advance purchased signal status when FundsLocked/Revealed/Validated/Settled occur
+  // Also auto-add agent purchases to purchased signals
   useWatchEscrowManagerEvents((ev) => {
     const tid = Number(ev.taskId)
+    const buyer = ev.buyer?.toLowerCase()
+    const provider = ev.provider?.toLowerCase()
+    const currentAddress = address?.toLowerCase()
+    
+    // If this wallet is the buyer (including agent purchases), add to purchased signals
+    if (buyer && currentAddress && buyer === currentAddress) {
+      // Check if signal already exists
+      const existingSignal = allSignals.find(s => s.taskId === tid)
+      
+      if (existingSignal) {
+        // Add to purchased signals if not already added
+        const signalId = `task-${tid}`
+        const alreadyPurchased = purchasedSignals.find(s => s.id === signalId)
+        
+        if (!alreadyPurchased) {
+          addPurchasedSignal({
+            id: signalId,
+            taskId: tid,
+            marketId: existingSignal.marketId,
+            marketName: existingSignal.marketName,
+            provider: provider || existingSignal.provider,
+            providerReputation: existingSignal.providerReputation,
+            description: existingSignal.description,
+            price: existingSignal.price,
+            stake: existingSignal.stake,
+            commitTime: existingSignal.commitTime,
+            status: 'locked',
+            category: existingSignal.category,
+            transactionHash: undefined,
+            cid: existingSignal.cid,
+          })
+          toast.success(`Agent purchase detected! Task #${tid} added to your signals`)
+        }
+      }
+    }
+    
     updateSignalStatusByTaskId(tid, 'revealed') // Move to next actionable step for buyer
     toast.success(`Buyer funds locked for task #${tid}`)
   })

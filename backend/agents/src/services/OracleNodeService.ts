@@ -184,18 +184,80 @@ export class OracleNodeService extends BaseService {
   private setupEventListeners(): void {
     // Listen for TaskRevealed events
     this.safeEventListener(this.commitRegistry, 'TaskRevealed', async (taskId, cid, event) => {
-      this.logActivity(`TaskRevealed detected: Task ${taskId} with CID ${cid}`)
+      const taskIdNum = Number(taskId)
+      this.logActivity(`\n🔔 ===== TaskRevealed Event (Oracle ${this.oracleId}) =====`)
+      this.logActivity(`📋 Task ID: ${taskIdNum}`)
+      this.logActivity(`🔗 CID: ${cid}`)
+      
+      // Fetch and decrypt revealed data
+      try {
+        const { decryptData } = await import('../../../../lib/storage-client')
+        const { generateDeterministicKey, generateDeterministicNonce } = await import('../../../../lib/crypto-utils')
+        
+        // Get provider address from task
+        const task = await this.commitRegistry.getTask(taskIdNum)
+        if (!task || !task.provider) {
+          this.logActivity(`⚠️ Task ${taskIdNum} not found or provider missing`)
+          return
+        }
+        
+        const provider = task.provider
+        const tempTaskId = 0
+        const key = await generateDeterministicKey(provider, tempTaskId)
+        const nonce = await generateDeterministicNonce(provider, tempTaskId)
+        
+        const decryptResult = await decryptData(cid, key, nonce)
+        if (decryptResult.success && decryptResult.data) {
+          // Parse JSON if it's a string
+          let parsedData = decryptResult.data
+          if (typeof parsedData === 'string') {
+            try {
+              // Handle string with escape sequences
+              const cleaned = parsedData.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n')
+              parsedData = JSON.parse(cleaned)
+            } catch (e) {
+              // If parsing fails, try direct parse
+              try {
+                parsedData = JSON.parse(parsedData)
+              } catch (e2) {
+                this.logActivity(`⚠️ Failed to parse JSON: ${(e2 as Error).message}`)
+                parsedData = decryptResult.data
+              }
+            }
+          }
+          
+          this.logActivity(`\n📊 ===== REVEALED DATA (Oracle ${this.oracleId}) =====`)
+          this.logActivity(`📋 Full Data (Parsed):`)
+          if (typeof parsedData === 'object') {
+            this.logActivity(JSON.stringify(parsedData, null, 2))
+            if (parsedData.prediction) {
+              this.logActivity(`🔮 Prediction: ${JSON.stringify(parsedData.prediction, null, 2)}`)
+            }
+            if (parsedData.signal_id) {
+              this.logActivity(`📋 Signal ID: ${parsedData.signal_id}`)
+            }
+            if (parsedData.confidence) {
+              this.logActivity(`📊 Confidence: ${parsedData.confidence}`)
+            }
+          } else {
+            this.logActivity(String(parsedData))
+          }
+          this.logActivity(`========================================\n`)
+        }
+      } catch (e) {
+        this.logActivity(`⚠️ Failed to decrypt revealed data (non-fatal): ${(e as Error).message}`)
+      }
       
       // Add to verification queue
-      this.verificationQueue.set(Number(taskId), {
-        taskId: Number(taskId),
+      this.verificationQueue.set(taskIdNum, {
+        taskId: taskIdNum,
         cid,
         startTime: Date.now(),
         status: 'pending'
       })
       
       // Start verification process
-      await this.verifyTask(Number(taskId), cid)
+      await this.verifyTask(taskIdNum, cid)
     })
 
     // Listen for verification submissions from other oracles
@@ -292,7 +354,14 @@ export class OracleNodeService extends BaseService {
         this.checkDataIntegrity(data) * 0.1
       )
       
-      this.logActivity(`AI Verification (${this.oracleId}): Task ${taskId} scored ${verificationScore} | Quality: ${qualityAnalysis.score} | Alignment: ${alignmentScore}`)
+      this.logActivity(`\n🤖 ===== AI VERIFICATION INSIGHTS (Oracle ${this.oracleId}) =====`)
+      this.logActivity(`📊 Task ID: ${taskId}`)
+      this.logActivity(`⭐ Overall Score: ${verificationScore}/100`)
+      this.logActivity(`📈 Quality Score: ${qualityAnalysis.score}/100`)
+      this.logActivity(`💡 Quality Reasoning: ${qualityAnalysis.reasoning}`)
+      this.logActivity(`🎯 Alignment Score: ${alignmentScore}/100`)
+      this.logActivity(`🔍 Integrity Check: ${this.checkDataIntegrity(data)}/100`)
+      this.logActivity(`========================================\n`)
       
       // 5. Submit verification to aggregator
       await this.submitVerification(taskId, verificationScore)
