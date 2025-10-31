@@ -99,14 +99,32 @@ function CommitContent() {
   const [verificationScore, setVerificationScore] = useState<number | null>(null)
   const [payoutAmount, setPayoutAmount] = useState<string | null>(null)
 
-  // Flow Actions (FLIPs) - optional wallet-triggered auto-reveal
+  // Flow Actions (FLIPs) - automatic auto-reveal
   const flowActions = useFlowActions()
+  const [flowActionTriggered, setFlowActionTriggered] = useState(false)
   useEffect(() => {
     // Ensure Flow EVM is the active chain when user lands here
     if (typeof window !== 'undefined' && (window as any).ethereum && chainId && chainId !== flowEvmTestnet.id) {
       switchChain({ chainId: flowEvmTestnet.id }).catch(() => {})
     }
   }, [chainId, switchChain])
+
+  // Automatically trigger Flow Action (autoReveal) when entering Reveal step
+  useEffect(() => {
+    const run = async () => {
+      if (currentStep === 3 && taskId && !flowActionTriggered) {
+        try {
+          await flowActions.autoReveal(taskId, '0xae8d45e9591b80cb')
+          setFlowActionTriggered(true)
+          toast.success('Flow Action (autoReveal) submitted automatically')
+        } catch (e:any) {
+          // Non-fatal; EVM reveal path still available
+          console.error('Auto Flow Action failed:', e)
+        }
+      }
+    }
+    run()
+  }, [currentStep, taskId, flowActionTriggered, flowActions])
 
   // Contract hooks
   const commitTask = useCommitTask()
@@ -643,33 +661,6 @@ function CommitContent() {
                 )}
               </Button>
 
-              <div className="text-center text-white/60">or</div>
-              <Button 
-                onClick={async () => {
-                  if (!taskId) return
-                  try {
-                    // Use Flow Actions autoReveal via wallet, pointing to user's Flow account address
-                    await flowActions.autoReveal(taskId, '0xae8d45e9591b80cb')
-                    toast.success('Flow Action (autoReveal) submitted')
-                  } catch (e:any) {
-                    toast.error('Flow Action failed: ' + (e?.message || 'Unknown error'))
-                  }
-                }}
-                disabled={!taskId || flowActions.isPending}
-                className="w-full bg-white/10 hover:bg-white/20 text-white border-white/30"
-              >
-                {flowActions.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Submitting Flow Action...
-                  </>
-                ) : (
-                  <>
-                    <Shield className="h-4 w-4 mr-2" />
-                    Use Flow Action (Auto-Reveal)
-                  </>
-                )}
-              </Button>
 
               {revealTask.error && (
                 <Alert className="bg-red-500/20 border-red-400/30">
