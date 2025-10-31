@@ -64,6 +64,8 @@ export class ProviderService extends BaseService {
       this.intervalId = null
     }
 
+    this.cleanupPollingIntervals()
+
     this.logActivity('Provider service stopped')
   }
 

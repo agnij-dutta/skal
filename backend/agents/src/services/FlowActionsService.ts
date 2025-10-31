@@ -1,5 +1,5 @@
 import * as fcl from "@onflow/fcl";
-import { SHA3 } from "js-sha3";
+import sha3 from "js-sha3";
 import elliptic from "elliptic";
 
 const ec = new elliptic.ec("p256");
@@ -14,9 +14,11 @@ export class FlowActionsService {
 		this.privateKey = process.env.FLOW_PRIVATE_KEY || "";
 		this.enabled = !!this.address && !!this.privateKey;
 
-		fcl.config()
-			.put("accessNode.api", "https://rest-testnet.onflow.org")
-			.put("sdk.transport", "HTTP/1.1");
+		fcl.config({
+			"accessNode.api": "https://rest-testnet.onflow.org",
+			"discovery.wallet": "https://fcl-discovery.onflow.org/testnet/authn",
+			"fcl.network": "testnet"
+		});
 	}
 
 	isEnabled(): boolean {
@@ -34,7 +36,8 @@ export class FlowActionsService {
 				signingFunction: async (signable: any) => {
 					const msg = Buffer.from(signable.message, "hex");
 					const key = ec.keyFromPrivate(Buffer.from(this.privateKey, "hex"));
-					const sig = key.sign(new SHA3(256).update(msg).digest());
+					const hash = sha3.sha3_256(msg);
+					const sig = key.sign(hash);
 					const n = 32;
 					const r = sig.r.toArrayLike(Buffer, "be", n);
 					const s = sig.s.toArrayLike(Buffer, "be", n);

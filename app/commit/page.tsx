@@ -109,22 +109,19 @@ function CommitContent() {
     }
   }, [chainId, switchChain])
 
-  // Automatically trigger Flow Action (autoReveal) when entering Reveal step
+  // Automatically trigger Flow Action (autoReveal) when entering Reveal step (non-blocking)
   useEffect(() => {
-    const run = async () => {
-      if (currentStep === 3 && taskId && !flowActionTriggered) {
-        try {
-          await flowActions.autoReveal(taskId, '0xae8d45e9591b80cb')
-          setFlowActionTriggered(true)
-          toast.success('Flow Action (autoReveal) submitted automatically')
-        } catch (e:any) {
-          // Non-fatal; EVM reveal path still available
-          console.error('Auto Flow Action failed:', e)
-        }
-      }
+    if (currentStep === 3 && taskId && !flowActionTriggered && !isProcessing) {
+      setFlowActionTriggered(true)
+      // Fire-and-forget: don't await to prevent UI blocking
+      flowActions.autoReveal(taskId, '0xae8d45e9591b80cb', false).then(() => {
+        toast.success('Flow Action (autoReveal) submitted')
+      }).catch((e:any) => {
+        // Non-fatal; EVM reveal path still available
+        console.error('Auto Flow Action failed (non-blocking):', e)
+      })
     }
-    run()
-  }, [currentStep, taskId, flowActionTriggered, flowActions])
+  }, [currentStep, taskId, flowActionTriggered, flowActions, isProcessing])
 
   // Contract hooks
   const commitTask = useCommitTask()

@@ -56,6 +56,18 @@ export abstract class BaseService extends EventEmitter {
   abstract start(): Promise<void>
   abstract stop(): Promise<void>
 
+  /**
+   * Clean up polling intervals when service stops
+   */
+  protected cleanupPollingIntervals(): void {
+    if ((this as any).pollingIntervals) {
+      (this as any).pollingIntervals.forEach((interval: NodeJS.Timeout) => {
+        clearInterval(interval)
+      })
+      ;(this as any).pollingIntervals = []
+    }
+  }
+
   protected async initializeWallet(privateKey: string): Promise<void> {
     this.wallet = new ethers.Wallet(privateKey, this.provider)
     console.log(`🔑 Wallet initialized: ${this.wallet.address}`)
@@ -102,21 +114,98 @@ export abstract class BaseService extends EventEmitter {
   }
 
   /**
-   * Safely wrap event listeners to prevent ethers.js internal errors from crashing the system
+   * Safely wrap event listeners using polling instead of filters (Flow EVM doesn't support long-lived filters)
+   * Polls for events every 5 seconds instead of using contract.on()
    */
   protected safeEventListener(contract: ethers.Contract, eventName: string, handler: (...args: any[]) => Promise<void> | void): void {
-    try {
-      contract.on(eventName, async (...args: any[]) => {
-        try {
-          await handler(...args)
-        } catch (error) {
-          // Don't let event handler errors crash the system
-          this.logActivity(`⚠️ Event handler error for ${eventName}: ${(error as Error).message}`)
+    let lastBlockNumber = 0
+    let pollingInterval: NodeJS.Timeout | null = null
+    const processedEvents = new Set<string>() // Track processed events to avoid duplicates
+
+    const pollForEvents = async () => {
+      try {
+        const currentBlock = await this.provider.getBlockNumber()
+        const fromBlock = lastBlockNumber || Math.max(0, currentBlock - 100) // Check last 100 blocks initially
+        
+        // Query events using queryFilter (doesn't rely on filters)
+        // Use the event signature directly instead of filters array access
+        const eventFragment = contract.interface.getEvent(eventName)
+        if (!eventFragment) {
+          this.logActivity(`⚠️ Event ${eventName} not found in contract interface`)
+          return
         }
-      })
-    } catch (error) {
-      this.logActivity(`⚠️ Failed to set up event listener for ${eventName}: ${(error as Error).message}`)
+        
+        const filter = {
+          address: contract.target,
+          topics: [contract.interface.getEvent(eventName)!.topicHash]
+        }
+        const events = await this.provider.getLogs({
+          ...filter,
+          fromBlock,
+          toBlock: currentBlock
+        })
+        
+        // Parse events using contract interface and pair with logs
+        const eventLogPairs = events.map((log) => {
+          try {
+            const parsed = contract.interface.parseLog(log)
+            return { log, parsed }
+          } catch {
+            return null
+          }
+        }).filter((e): e is { log: ethers.Log; parsed: ethers.LogDescription } => e !== null)
+        
+        for (const { log, parsed: parsedEvent } of eventLogPairs) {
+          // Create unique event ID from transaction hash and log index
+          const eventId = `${log.transactionHash}-${log.index}`
+          
+          if (!processedEvents.has(eventId)) {
+            processedEvents.add(eventId)
+            
+            // Extract event args and call handler
+            try {
+              const args = parsedEvent.args ? [...parsedEvent.args] : []
+              // Create a mock event object that matches what contract.on() would provide
+              const mockEvent = {
+                ...log,
+                args: parsedEvent.args,
+                event: parsedEvent.name,
+                eventSignature: parsedEvent.signature,
+                decode: parsedEvent.decode.bind(parsedEvent)
+              }
+              await handler(...args, mockEvent)
+            } catch (error) {
+              // Don't let event handler errors crash the system
+              this.logActivity(`⚠️ Event handler error for ${eventName}: ${(error as Error).message}`)
+            }
+          }
+        }
+        
+        lastBlockNumber = currentBlock
+        
+        // Clean up old processed events (keep last 1000)
+        if (processedEvents.size > 1000) {
+          const entries = Array.from(processedEvents)
+          entries.slice(0, entries.length - 1000).forEach(id => processedEvents.delete(id))
+        }
+      } catch (error) {
+        // Silently handle polling errors (filter expiration, network issues, etc.)
+        const err = error as any
+        if (err.code !== 'UNKNOWN_ERROR' && !err.message?.includes('filter')) {
+          this.logActivity(`⚠️ Polling error for ${eventName}: ${err.message || err}`)
+        }
+      }
     }
+
+    // Start polling immediately, then every 5 seconds
+    pollForEvents()
+    pollingInterval = setInterval(pollForEvents, 5000)
+
+    // Store interval so it can be cleaned up
+    if (!(this as any).pollingIntervals) {
+      (this as any).pollingIntervals = []
+    }
+    (this as any).pollingIntervals.push(pollingInterval)
   }
 
   protected async waitForTransaction(txHash: string): Promise<ethers.TransactionReceipt | null> {
