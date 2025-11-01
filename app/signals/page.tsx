@@ -93,6 +93,7 @@ function SignalsContent() {
   // Contract hooks
   const lockFunds = useLockFunds()
   const { addPurchasedSignal, purchasedSignals, updateSignalStatusByTaskId } = useUserSignalsContext()
+  const userSignals = purchasedSignals // Alias for clarity
   const [viewer, setViewer] = useState<{ open: boolean, taskId?: number, cid?: string, content?: any }>(() => ({ open: false }))
   
   // Reveal modal state
@@ -107,9 +108,6 @@ function SignalsContent() {
   const { signals: allSignals, isLoading: signalsLoading } = useSignals()
   const { signals: availableSignals } = useAvailableSignals()
   const { signals: verifiedSignals } = useVerifiedSignals()
-  
-  // Get user's purchased signals from context
-  const { purchasedSignals: userSignals, addPurchasedSignal } = useUserSignalsContext()
   
   // Fetch escrows for this buyer to detect agent purchases
   const { taskIds: buyerTaskIds } = useGetBuyerEscrows(address as `0x${string}` | undefined)
