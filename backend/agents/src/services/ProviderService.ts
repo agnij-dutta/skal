@@ -82,12 +82,103 @@ export class ProviderService extends BaseService {
   }
 
   private startRevelationCheck(): void {
+    // Initial check for all unrevealed tasks we created
+    this.checkAllProviderTasksForRevelation()
+    
     // Check every 10 seconds for tasks that need revelation
     setInterval(async () => {
       await this.checkAndRevealTasks()
+      // Also check all provider tasks periodically
+      await this.checkAllProviderTasksForRevelation()
     }, 10000)
     
     this.logActivity('Started periodic revelation check (every 10 seconds)')
+  }
+  
+  /**
+   * Check all tasks created by this provider and reveal any unrevealed ones
+   * This ensures all tasks are revealed before verification begins
+   */
+  private async checkAllProviderTasksForRevelation(): Promise<void> {
+    if (!this.wallet) return
+    
+    try {
+      // Get total task count to iterate through tasks
+      const totalTasks = await this.commitRegistry.getTotalTasks()
+      const totalTasksNum = Number(totalTasks)
+      
+      this.logActivity(`Checking all ${totalTasksNum} tasks for unrevealed provider tasks...`)
+      
+      // Check tasks in batches to avoid overwhelming the RPC
+      const batchSize = 50
+      for (let start = 0; start < totalTasksNum; start += batchSize) {
+        const end = Math.min(start + batchSize, totalTasksNum)
+        
+        for (let taskId = start; taskId < end; taskId++) {
+          try {
+            const task = await this.commitRegistry.getTask(taskId)
+            
+            // Only check tasks created by this provider
+            if (!task || task.provider?.toLowerCase() !== this.wallet!.address.toLowerCase()) {
+              continue
+            }
+            
+            const taskState = Number(task.state || 0)
+            const hasCid = task.cid && task.cid.length > 0
+            
+            // If task is committed (state 0) and not revealed yet
+            if (taskState === 0 && !hasCid) {
+              // Check if we have a CID stored for this task
+              const storedCid = this.taskCids.get(taskId)
+              
+              if (storedCid) {
+                // Check if funds are locked (optional - we'll reveal anyway if CID exists)
+                let shouldReveal = false
+                let revealReason = ''
+                
+                try {
+                  const escrow = await this.escrowManager.getEscrow(taskId)
+                  const escrowState = Number(escrow.state || 0)
+                  
+                  // Only reveal if funds are locked (escrow state 0 = Locked)
+                  if (escrowState === 0) {
+                    shouldReveal = true
+                    revealReason = 'funds locked'
+                  } else {
+                    // Escrow exists but not locked yet, wait
+                    this.logActivity(`⏳ Task ${taskId} escrow state: ${escrowState}, waiting for funds to be locked`)
+                  }
+                } catch (escrowError) {
+                  // Escrow doesn't exist yet - funds not locked, don't reveal
+                  // But log that we're ready to reveal when funds come in
+                  this.logActivity(`📋 Task ${taskId} ready to reveal when funds are locked (CID: ${storedCid.slice(0, 20)}...)`)
+                }
+                
+                if (shouldReveal) {
+                  // Reveal the task proactively
+                  this.logActivity(`🚀 Proactively revealing task ${taskId} (${revealReason}, CID available)`)
+                  const success = await this.revealTask(taskId)
+                  if (success) {
+                    this.taskCids.delete(taskId)
+                    this.logActivity(`✅ Task ${taskId} revealed proactively`)
+                  } else {
+                    this.logActivity(`⚠️ Task ${taskId} reveal failed, will retry`)
+                  }
+                }
+              } else {
+                // No stored CID, but task exists - log for debugging
+                this.logActivity(`⚠️ Task ${taskId} created by provider but no CID stored`)
+              }
+            }
+          } catch (error) {
+            // Task might not exist, continue
+            continue
+          }
+        }
+      }
+    } catch (error) {
+      this.logActivity(`⚠️ Error checking all provider tasks: ${(error as Error).message}`)
+    }
   }
 
   private async checkAndRevealTasks(): Promise<void> {

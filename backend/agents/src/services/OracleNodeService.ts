@@ -248,17 +248,22 @@ export class OracleNodeService extends BaseService {
         this.logActivity(`⚠️ Failed to decrypt revealed data (non-fatal): ${(e as Error).message}`)
       }
       
-      // Add to verification queue
-      this.verificationQueue.set(taskIdNum, {
-        taskId: taskIdNum,
-        cid,
-        startTime: Date.now(),
-        status: 'pending'
-      })
-      
-      // Start verification process
-      await this.verifyTask(taskIdNum, cid)
+        // Add to verification queue
+        this.verificationQueue.set(taskIdNum, {
+          taskId: taskIdNum,
+          cid,
+          startTime: Date.now(),
+          status: 'pending'
+        })
+        
+        // Start verification process (verifyTask will check if revealed)
+        await this.verifyTask(taskIdNum, cid)
     })
+    
+    // Periodic check for tasks waiting for reveal
+    setInterval(async () => {
+      await this.processWaitingForRevealTasks()
+    }, 15000) // Check every 15 seconds
 
     // Listen for verification submissions from other oracles
     this.safeEventListener(this.verificationAggregator, 'VerificationSubmitted', async (taskId, verifier, score, event) => {
@@ -283,6 +288,31 @@ export class OracleNodeService extends BaseService {
   }
 
   /**
+   * Process tasks that were waiting for reveal - check if they're now revealed
+   */
+  private async processWaitingForRevealTasks(): Promise<void> {
+    try {
+      for (const [taskId, taskInfo] of this.verificationQueue.entries()) {
+        if (taskInfo.status === 'waiting_for_reveal') {
+          const task = await this.commitRegistry.getTask(taskId)
+          const taskState = Number(task?.state || 0)
+          const taskCid = task?.cid || ''
+          
+          // If task is now revealed, verify it
+          if (taskState >= 1 && taskCid && taskCid.length > 0) {
+            this.logActivity(`✅ Task ${taskId} is now revealed, starting verification`)
+            taskInfo.status = 'pending'
+            taskInfo.cid = taskCid
+            await this.verifyTask(taskId, taskCid)
+          }
+        }
+      }
+    } catch (error) {
+      this.logActivity(`⚠️ Error processing waiting-for-reveal tasks: ${(error as Error).message}`)
+    }
+  }
+
+  /**
    * Check for existing revealed tasks
    */
   private async checkExistingRevealedTasks(): Promise<void> {
@@ -302,16 +332,35 @@ export class OracleNodeService extends BaseService {
           const hasConsensus = await this.verificationAggregator.hasConsensus(taskId)
           
           if (!hasConsensus && submissionCount < 3) {
-            this.logActivity(`Found unfinished task ${taskId}, adding to queue`)
+            // PRE-VERIFICATION CHECK: Ensure task is revealed
+            const task = await this.commitRegistry.getTask(taskId)
+            const taskState = Number(task?.state || 0)
+            const taskCid = task?.cid || ''
+            
+            if (taskState === 0 || !taskCid || taskCid.length === 0) {
+              this.logActivity(`⏸️ Task ${taskId} found but not yet revealed (state: ${taskState}), waiting for provider reveal`)
+              this.verificationQueue.set(taskId, {
+                taskId,
+                cid: '',
+                startTime: Date.now(),
+                status: 'waiting_for_reveal'
+              })
+              continue
+            }
+            
+            // Use task CID if available
+            const actualCid = taskCid.length > 0 ? taskCid : cid
+            
+            this.logActivity(`Found unfinished revealed task ${taskId}, adding to queue`)
             this.verificationQueue.set(taskId, {
               taskId,
-              cid,
+              cid: actualCid,
               startTime: Date.now(),
               status: 'pending'
             })
             
-            // Verify it
-            await this.verifyTask(taskId, cid)
+            // Verify it (only if revealed)
+            await this.verifyTask(taskId, actualCid)
           }
         }
       }
@@ -335,6 +384,36 @@ export class OracleNodeService extends BaseService {
     }
 
     try {
+      // PRE-VERIFICATION CHECK: Ensure task is revealed before verifying
+      const task = await this.commitRegistry.getTask(taskId)
+      if (!task) {
+        this.logActivity(`⚠️ Task ${taskId} not found, skipping verification`)
+        return
+      }
+      
+      const taskState = Number(task.state || 0)
+      const taskCid = task.cid || ''
+      
+      // Task state: 0=Committed, 1=Revealed, 2=Validated, 3=Settled
+      if (taskState === 0 || !taskCid || taskCid.length === 0) {
+        this.logActivity(`⏸️ Task ${taskId} not yet revealed (state: ${taskState}), waiting for provider to reveal before verification`)
+        
+        // Add to queue with delayed status - will be checked again later
+        this.verificationQueue.set(taskId, {
+          taskId,
+          cid: '', // No CID yet
+          startTime: Date.now(),
+          status: 'waiting_for_reveal'
+        })
+        return
+      }
+      
+      // Update CID if different from what we have
+      if (cid !== taskCid && taskCid.length > 0) {
+        cid = taskCid
+        this.logActivity(`📋 Updated CID for task ${taskId} from task state: ${cid}`)
+      }
+      
       this.logActivity(`🧠 AI-powered verification for task ${taskId} with CID ${cid} (Oracle: ${this.oracleId})`)
       
       // 1. Fetch and decrypt data from IPFS
