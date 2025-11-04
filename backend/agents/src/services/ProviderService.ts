@@ -136,6 +136,10 @@ export class ProviderService extends BaseService {
       
       // 1. Analyze current market demand
       const marketDemand = await this.analyzeMarketDemand()
+      console.log(JSON.stringify({
+        type: 'ai_market_demand',
+        data: marketDemand
+      }, null, 2))
       
       // 2. AI determines optimal task parameters
       const taskParams = await this.aiEngine.optimizeTaskCreation({
@@ -144,9 +148,19 @@ export class ProviderService extends BaseService {
         competitorAnalysis: await this.analyzeCompetitors(),
         historicalPerformance: await this.getHistoricalPerformance()
       })
+      console.log(JSON.stringify({
+        type: 'ai_task_params',
+        taskParams
+      }, null, 2))
       
       // 3. Generate high-quality data
       const intelligentData = await this.generateIntelligentData(taskParams)
+      console.log(JSON.stringify({
+        type: 'ai_generated_data',
+        preview: intelligentData.data,
+        qualityScore: intelligentData.qualityScore,
+        metadata: intelligentData.metadata
+      }, null, 2))
       
   // 4. Determine optimal stake
   const optimalStake = await this.riskManager.determineOptimalStakeSize({
@@ -168,12 +182,22 @@ export class ProviderService extends BaseService {
       historicalSuccessRate: await this.getHistoricalPerformance().then(p => p.averageScore / 100)
     }
   }, await this.provider.getBalance(this.wallet!.address))
+      console.log(JSON.stringify({
+        type: 'ai_optimal_stake',
+        stakeWei: optimalStake.toString()
+      }, null, 2))
       
       // 5. Upload and commit
       const cid = await this.uploadToStorage(intelligentData.data)
       const commitHash = ethers.keccak256(ethers.toUtf8Bytes(cid + Date.now()))
       
       const taskId = await this.commitTaskToBlockchain(commitHash, taskParams.marketId, optimalStake)
+      console.log(JSON.stringify({
+        type: 'provider_committed_task',
+        taskId,
+        commitHash,
+        cid
+      }, null, 2))
       
       // Store the CID for later revelation
       if (taskId > 0) {
@@ -289,12 +313,42 @@ export class ProviderService extends BaseService {
       }
       
       this.logActivity(`Using stored CID ${cid} for task ${taskId}`)
+
+      // Preflight: ensure escrow state is locked (0) and simulate reveal to catch reverts
+      try {
+        const escrowState = await this.escrowManager.getEscrowState(BigInt(taskId))
+        if (Number(escrowState) !== 0) {
+          this.logActivity(`⏳ Escrow not locked yet for task ${taskId} (state=${escrowState}), will retry later`)
+          return false
+        }
+        
+        // Also check if task has been purchased (has buyer)
+        const escrow = await this.escrowManager.getEscrow(BigInt(taskId))
+        if (!escrow || escrow.buyer === ethers.ZeroAddress) {
+          this.logActivity(`⏳ Task ${taskId} has no buyer yet, waiting for purchase...`)
+          return false
+        }
+      } catch (e: any) {
+        this.logActivity(`⚠️  Could not check escrow state for task ${taskId}: ${e.message}`)
+        return false
+      }
+
+      // Static call to surface revert reasons before sending
+      try {
+        await (this.commitRegistry.connect(this.wallet) as any).revealTask.staticCall(BigInt(taskId), cid)
+      } catch (simError: any) {
+        this.logActivity(`⚠️  Reveal simulation reverted for task ${taskId}: ${simError?.shortMessage || simError?.message || simError}`)
+        // Backoff and retry later
+        setTimeout(() => this.revealTask(taskId).catch(() => {}), 30000)
+        return false
+      }
       
       const tx = await (this.commitRegistry.connect(this.wallet) as any).revealTask(
         BigInt(taskId),
         cid,
         {
-          gasLimit: 300000 // Increased gas limit
+          gasLimit: 300000, // Increased gas limit
+          nonce: await this.provider.getTransactionCount(this.wallet.address, 'pending')
         }
       )
 
@@ -311,11 +365,15 @@ export class ProviderService extends BaseService {
         return true
       } else {
         this.logError(new Error('Transaction failed'), `Task ${taskId} revelation failed`)
+        // Retry after short delay if it failed (chain could be lagging)
+        setTimeout(() => this.revealTask(taskId).catch(() => {}), 30000)
         return false
       }
       
-    } catch (error) {
+    } catch (error: any) {
       this.logError(error as Error, `Failed to reveal task ${taskId}`)
+      // Retry with backoff to account for eventual consistency
+      setTimeout(() => this.revealTask(taskId).catch(() => {}), 30000)
       return false
     }
   }
@@ -419,6 +477,11 @@ export class ProviderService extends BaseService {
     
     try {
       const geminiResponse = await this.aiEngine.generateWithGemini(prompt)
+      console.log(JSON.stringify({
+        type: 'ai_gemini_response',
+        prompt,
+        response: geminiResponse
+      }, null, 2))
       
       return {
         data: geminiResponse,

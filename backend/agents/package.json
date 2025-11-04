@@ -21,6 +21,8 @@
     "dev:verifier": "tsx src/verifierAgent.ts",
     "dev:lp": "tsx src/lpAgent.ts",
     "register:oracles": "tsx src/scripts/register-oracle.ts",
+    "gen:wallets": "tsx src/scripts/generate-wallets.ts",
+    "check:balances": "tsx src/scripts/check-wallet-balances.ts",
     "start:oracle:1": "ORACLE_ID=1 tsx src/index.ts",
     "start:oracle:2": "ORACLE_ID=2 tsx src/index.ts",
     "start:oracle:3": "ORACLE_ID=3 tsx src/index.ts",

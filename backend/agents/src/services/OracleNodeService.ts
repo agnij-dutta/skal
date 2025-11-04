@@ -330,9 +330,9 @@ export class OracleNodeService extends BaseService {
       return
     }
 
+    // Proceed even if not registered; registry may be optional on Somnia
     if (!this.isRegistered) {
-      this.logActivity(`⚠️  Skipping verification - oracle ${this.oracleId} not registered`)
-      return
+      this.logActivity(`⚠️  Oracle ${this.oracleId} not registered; proceeding with verification anyway`)
     }
 
     try {
@@ -361,6 +361,20 @@ export class OracleNodeService extends BaseService {
       )
       
       this.logActivity(`AI Verification (${this.oracleId}): Task ${taskId} scored ${verificationScore} | Quality: ${qualityAnalysis.score} | Alignment: ${alignmentScore}`)
+      // Emit structured verification result and raw data for parsing
+      console.log(JSON.stringify({
+        type: 'oracle_verification',
+        oracleId: this.oracleId,
+        taskId,
+        cid,
+        verification: {
+          verificationScore,
+          qualityScore: qualityAnalysis.score,
+          alignmentScore,
+          details: (qualityAnalysis as any).notes || (qualityAnalysis as any).details || null
+        },
+        data
+      }, null, 2))
       
       // 5. Submit verification to aggregator
       await this.submitVerification(taskId, verificationScore)

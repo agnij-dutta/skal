@@ -210,7 +210,8 @@ export class BuyerService extends BaseService {
         BigInt(taskId),
         {
           gasLimit: 4000000, // Increased gas limit based on contract requirements
-          value: ethers.parseEther(amount) // Send STT as escrow amount
+          value: ethers.parseEther(amount), // Send STT as escrow amount
+          nonce: await this.provider.getTransactionCount(this.wallet.address, 'pending')
         }
       )
 
@@ -259,7 +260,13 @@ export class BuyerService extends BaseService {
       
       if (result.success && result.data) {
         this.logActivity(`Successfully decrypted task ${taskId} data`)
-        this.logActivity(`Task data: ${JSON.stringify(result.data, null, 2)}`)
+        // Structured output for frontend/dev parsing
+        console.log(JSON.stringify({
+          type: 'buyer_decrypted_task',
+          taskId,
+          cid: task.cid,
+          data: result.data
+        }, null, 2))
         
         // Store the decrypted data for AI analysis or further processing
         await this.processDecryptedTaskData(taskId, result.data)
@@ -275,6 +282,7 @@ export class BuyerService extends BaseService {
   private async processDecryptedTaskData(taskId: number, data: any): Promise<void> {
     try {
       // Process the decrypted trading signal data
+      const pretty = (obj: any) => JSON.stringify(obj, null, 2)
       this.logActivity(`Processing decrypted data for task ${taskId}:`)
       this.logActivity(`Signal type: ${data.prediction ? 'Price Prediction' : data.signal ? 'Trading Signal' : 'Unknown'}`)
       
@@ -291,8 +299,20 @@ export class BuyerService extends BaseService {
         this.logActivity(`Confidence: ${data.confidence}`)
       }
       
-      // Here you could add AI analysis of the decrypted signal
-      // For example, validate the signal quality, extract insights, etc.
+      // Also emit a structured blob for consumers
+      console.log(JSON.stringify({
+        type: 'buyer_decrypted_task_summary',
+        taskId,
+        summary: {
+          prediction: data.prediction ?? null,
+          signal: data.signal ?? null,
+          asset: data.asset ?? null,
+          price: data.price ?? null,
+          confidence: data.confidence ?? null,
+          reasoning: data.reasoning ?? null
+        },
+        raw: data
+      }, null, 2))
       
     } catch (error) {
       this.logError(error as Error, `Failed to process decrypted data for task ${taskId}`)
