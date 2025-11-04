@@ -85,8 +85,13 @@ export class OracleNodeService extends BaseService {
       // Setup event listeners
       this.setupEventListeners()
       
-      // Monitor existing revealed tasks
-      await this.checkExistingRevealedTasks()
+      // Monitor existing revealed tasks (non-blocking - allow service to start even if this fails)
+      try {
+        await this.checkExistingRevealedTasks()
+      } catch (scanError) {
+        // Log but don't prevent startup - historical scan is optional
+        this.logActivity(`⚠️  Historical scan failed, but service will continue: ${(scanError as Error).message}`)
+      }
       
       this.logActivity(`Oracle Node ${this.oracleId} is active and listening for tasks`)
       
@@ -222,39 +227,97 @@ export class OracleNodeService extends BaseService {
 
   /**
    * Check for existing revealed tasks
+   * Uses chunked queries to avoid RPC block range limits
    */
   private async checkExistingRevealedTasks(): Promise<void> {
     try {
       this.logActivity('Checking for existing revealed tasks...')
       
-      const filter = this.commitRegistry.filters.TaskRevealed()
-      const events = await this.commitRegistry.queryFilter(filter, -1000) // Last 1000 blocks
+      const currentBlock = await this.provider.getBlockNumber()
+      const lookbackBlocks = 5000 // Look back 5000 blocks
+      const chunkSize = 900 // Stay under 1000 block limit
+      const startBlock = Math.max(0, currentBlock - lookbackBlocks)
       
-      for (const event of events) {
-        if ('args' in event && event.args) {
+      const allEvents: any[] = []
+      const eventTopic = this.commitRegistry.interface.getEvent('TaskRevealed')!.topicHash
+      
+      // Chunk the query to avoid RPC limits
+      for (let fromBlock = startBlock; fromBlock < currentBlock; fromBlock += chunkSize) {
+        const toBlock = Math.min(fromBlock + chunkSize - 1, currentBlock)
+        
+        try {
+          const logs = await this.provider.getLogs({
+            address: this.config.contractAddresses.commitRegistry,
+            topics: [eventTopic],
+            fromBlock,
+            toBlock
+          })
+          
+          // Parse logs to events
+          for (const log of logs) {
+            try {
+              const parsedEvent = this.commitRegistry.interface.parseLog(log)
+              if (parsedEvent) {
+                // Create a mock event object compatible with the existing code
+                const mockEvent = {
+                  args: parsedEvent.args,
+                  blockNumber: log.blockNumber,
+                  transactionHash: log.transactionHash,
+                  decode: () => parsedEvent.args
+                }
+                allEvents.push(mockEvent)
+              }
+            } catch (parseError) {
+              // Skip logs that can't be parsed
+              continue
+            }
+          }
+        } catch (chunkError: any) {
+          // If a chunk fails, log and continue with other chunks
+          if (chunkError.message?.includes('block range')) {
+            this.logActivity(`⚠️  Skipping chunk ${fromBlock}-${toBlock} due to block range limit`)
+          } else {
+            this.logActivity(`⚠️  Error querying chunk ${fromBlock}-${toBlock}: ${chunkError.message}`)
+          }
+          continue
+        }
+      }
+      
+      this.logActivity(`Found ${allEvents.length} TaskRevealed events in historical scan`)
+      
+      for (const event of allEvents) {
+        if (event.args && event.args.taskId !== undefined) {
           const taskId = Number(event.args.taskId)
-          const cid = event.args.cid
+          const cid = event.args.cid || ''
           
           // Check if already submitted or finalized
-          const submissionCount = await this.verificationAggregator.getSubmissionCount(taskId)
-          const hasConsensus = await this.verificationAggregator.hasConsensus(taskId)
-          
-          if (!hasConsensus && submissionCount < 3) {
-            this.logActivity(`Found unfinished task ${taskId}, adding to queue`)
-            this.verificationQueue.set(taskId, {
-              taskId,
-              cid,
-              startTime: Date.now(),
-              status: 'pending'
-            })
+          try {
+            const submissionCount = await this.verificationAggregator.getSubmissionCount(taskId)
+            const hasConsensus = await this.verificationAggregator.hasConsensus(taskId)
             
-            // Verify it
-            await this.verifyTask(taskId, cid)
+            if (!hasConsensus && submissionCount < 3) {
+              this.logActivity(`Found unfinished task ${taskId}, adding to queue`)
+              this.verificationQueue.set(taskId, {
+                taskId,
+                cid,
+                startTime: Date.now(),
+                status: 'pending'
+              })
+              
+              // Verify it
+              if (cid) {
+                await this.verifyTask(taskId, cid)
+              }
+            }
+          } catch (checkError) {
+            // Skip tasks that can't be checked (might not exist or contract error)
+            continue
           }
         }
       }
     } catch (error) {
       this.logError(error as Error, 'Failed to check existing revealed tasks')
+      // Don't throw - allow service to continue even if historical scan fails
     }
   }
 

@@ -125,9 +125,18 @@ function SignalsContent() {
   })
   useWatchCommitRegistryEvents(
     undefined,
-    (ev) => {
+    async (ev) => {
       const tid = Number(ev.taskId)
       updateSignalStatusByTaskId(tid, 'revealed')
+      // Try to auto-decrypt on reveal
+      try {
+        // Prefer CID from event if present; otherwise rely on signals list
+        // @ts-ignore
+        const cid = ev.cid || allSignals.find(s => s.taskId === tid)?.cid
+        if (cid) {
+          await attemptAutomaticDecryption(tid, String(cid))
+        }
+      } catch {}
     },
     (ev) => {
       const tid = Number(ev.taskId)
@@ -304,6 +313,11 @@ function SignalsContent() {
     setDecryptionKey('')
     setDecryptionNonce('')
     setShowRevealModal(true)
+
+    // Attempt automatic decryption (non-blocking)
+    try {
+      await openViewerForTask(signal.taskId)
+    } catch {}
   }
 
   const handleDecryptData = async () => {
