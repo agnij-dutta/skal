@@ -31,8 +31,8 @@ export class VerifierService extends BaseService {
       // Listen for task reveals
       this.setupEventListeners()
       
-      // Skip historical check for testing
-      this.logActivity('Skipping historical task check for testing')
+      // Check for existing revealed tasks
+      this.checkRevealedTasks()
       
     } catch (error) {
       this.logError(error as Error, 'Failed to start verifier service')
@@ -51,28 +51,115 @@ export class VerifierService extends BaseService {
   }
 
   private setupEventListeners(): void {
-    // Listen for task reveals
-    this.commitRegistry.on('TaskRevealed', async (taskId, cid, event) => {
-      this.logActivity(`Task revealed: ${taskId} with CID ${cid}`)
+    // Use polling instead of filters to avoid "too many filters" error
+    this.startTaskRevealedPolling()
+  }
+
+  private startTaskRevealedPolling(): void {
+    let lastProcessedBlock = 0
+    const processedEvents = new Set<string>()
+    
+    const poll = async () => {
+      try {
+        const currentBlock = await this.provider.getBlockNumber()
+        const fromBlock = lastProcessedBlock || Math.max(0, currentBlock - 100)
+        
+        const eventTopic = this.commitRegistry.interface.getEvent('TaskRevealed')!.topicHash
+        const logs = await this.provider.getLogs({
+          address: this.config.contractAddresses.commitRegistry,
+          topics: [eventTopic],
+          fromBlock,
+          toBlock: currentBlock
+        })
+        
+        for (const log of logs) {
+          const eventId = `${log.blockNumber}-${log.transactionHash}-${log.index || 0}`
+          if (processedEvents.has(eventId)) continue
+          processedEvents.add(eventId)
+          
+          try {
+            const parsedEvent = this.commitRegistry.interface.parseLog(log)
+            if (parsedEvent && parsedEvent.args) {
+              const taskId = Number(parsedEvent.args.taskId)
+              const cid = parsedEvent.args.cid
+              
+              this.logActivity(`Task revealed: ${taskId} with CID ${cid}`)
+              this.verificationQueue.add(taskId)
+              await this.verifyTask(taskId, cid)
+            }
+          } catch (parseError) {
+            continue
+          }
+        }
+        
+        lastProcessedBlock = currentBlock + 1
+      } catch (error) {
+        this.logError(error as Error, 'Failed to poll for TaskRevealed events')
+      }
       
-      // Add to verification queue
-      this.verificationQueue.add(Number(taskId))
-      
-      // Start verification process
-      await this.verifyTask(Number(taskId), cid)
-    })
+      setTimeout(poll, 5000)
+    }
+    
+    poll()
   }
 
   private async checkRevealedTasks(): Promise<void> {
     try {
       this.logActivity('Checking for revealed tasks...')
       
-      // Get recent task reveals from the contract
-      const filter = this.commitRegistry.filters.TaskRevealed()
-      const events = await this.commitRegistry.queryFilter(filter, -1000) // Last 1000 blocks
+      const currentBlock = await this.provider.getBlockNumber()
+      const lookbackBlocks = 5000 // Look back 5000 blocks
+      const chunkSize = 900 // Stay under 1000 block limit
+      const startBlock = Math.max(0, currentBlock - lookbackBlocks)
       
-      for (const event of events) {
-        if ('args' in event && event.args) {
+      const allEvents: any[] = []
+      const eventTopic = this.commitRegistry.interface.getEvent('TaskRevealed')!.topicHash
+      
+      // Chunk the query to avoid RPC limits
+      for (let fromBlock = startBlock; fromBlock < currentBlock; fromBlock += chunkSize) {
+        const toBlock = Math.min(fromBlock + chunkSize - 1, currentBlock)
+        
+        try {
+          const logs = await this.provider.getLogs({
+            address: this.config.contractAddresses.commitRegistry,
+            topics: [eventTopic],
+            fromBlock,
+            toBlock
+          })
+          
+          // Parse logs to events
+          for (const log of logs) {
+            try {
+              const parsedEvent = this.commitRegistry.interface.parseLog(log)
+              if (parsedEvent && parsedEvent.args) {
+                // Create a mock event object compatible with the existing code
+                const mockEvent = {
+                  args: parsedEvent.args,
+                  blockNumber: log.blockNumber,
+                  transactionHash: log.transactionHash,
+                  decode: () => parsedEvent.args
+                }
+                allEvents.push(mockEvent)
+              }
+            } catch (parseError) {
+              // Skip logs that can't be parsed
+              continue
+            }
+          }
+        } catch (chunkError: any) {
+          // If a chunk fails, log and continue with other chunks
+          if (chunkError.message?.includes('block range')) {
+            this.logActivity(`⚠️  Block range too large for chunk ${fromBlock}-${toBlock}, skipping`)
+          } else {
+            this.logError(chunkError as Error, `Failed to query chunk ${fromBlock}-${toBlock}`)
+          }
+          continue
+        }
+      }
+      
+      // Process all found events
+      for (const event of allEvents) {
+        if (event.args) {
           const taskId = Number(event.args.taskId)
           const cid = event.args.cid
           
@@ -80,6 +167,8 @@ export class VerifierService extends BaseService {
           await this.verifyTask(taskId, cid)
         }
       }
+      
+      this.logActivity(`Found ${allEvents.length} TaskRevealed events in historical scan`)
       
     } catch (error) {
       this.logError(error as Error, 'Failed to check revealed tasks')

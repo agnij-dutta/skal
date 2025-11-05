@@ -81,39 +81,76 @@ async function registerOracle(
     }
     
     console.log(`\n🚀 Registering with stake: ${stakeAmount} STT`)
+    
+    // Pre-flight check: simulate the call to see if it will revert
+    try {
+      await (oracleRegistry.connect(wallet) as any).registerOracle.staticCall({
+        value: stake
+      })
+    } catch (simError: any) {
+      console.error(`❌ Pre-flight check failed: ${simError.reason || simError.message}`)
+      if (simError.reason?.includes('Already registered')) {
+        console.log('ℹ️  Oracle may already be registered but not showing as active')
+      } else if (simError.reason?.includes('Insufficient stake')) {
+        console.error(`❌ Stake amount ${stakeAmount} STT is less than minimum required`)
+      }
+      return
+    }
+    
     console.log('⏳ Submitting transaction...')
     
-    // Register oracle
-    const tx = await oracleRegistry.registerOracle({
-      value: stake,
-      gasLimit: 500000
-    })
-    
-    console.log(`📤 Transaction hash: ${tx.hash}`)
-    console.log('⏳ Waiting for confirmation...')
-    
-    const receipt = await tx.wait()
-    
-    if (receipt && receipt.status === 1) {
-      console.log(`✅ Oracle registered successfully!`)
-      console.log(`📦 Block: ${receipt.blockNumber}`)
-      console.log(`⛽ Gas used: ${receipt.gasUsed}`)
+    // Register oracle with proper gas estimation
+    try {
+      const gasEstimate = await oracleRegistry.registerOracle.estimateGas({
+        value: stake
+      })
       
-      // Get updated count
-      const activeCount = await oracleRegistry.getActiveOracleCount()
-      console.log(`\n📊 Total Active Oracles: ${activeCount}`)
+      const tx = await oracleRegistry.registerOracle({
+        value: stake,
+        gasLimit: gasEstimate * BigInt(120) / BigInt(100) // Add 20% buffer
+      })
       
-      // Get oracle details
-      const details = await oracleRegistry.getOracle(wallet.address)
-      console.log('\nYour Oracle Details:')
-      console.log(`  Address: ${wallet.address}`)
-      console.log(`  Stake: ${ethers.formatEther(details[1])} STT`)
-      console.log(`  Reputation: ${details[2]} (starts at 50)`)
-      console.log(`  Status: Active`)
+      console.log(`📤 Transaction hash: ${tx.hash}`)
+      console.log('⏳ Waiting for confirmation...')
       
-      console.log('\n✅ Oracle is ready to verify tasks!')
-    } else {
-      console.error('❌ Registration failed - transaction reverted')
+      const receipt = await tx.wait()
+      
+      if (receipt && receipt.status === 1) {
+        console.log(`✅ Oracle registered successfully!`)
+        console.log(`📦 Block: ${receipt.blockNumber}`)
+        console.log(`⛽ Gas used: ${receipt.gasUsed}`)
+        
+        // Get updated count
+        const activeCount = await oracleRegistry.getActiveOracleCount()
+        console.log(`\n📊 Total Active Oracles: ${activeCount}`)
+        
+        // Get oracle details
+        const details = await oracleRegistry.getOracle(wallet.address)
+        console.log('\nYour Oracle Details:')
+        console.log(`  Address: ${wallet.address}`)
+        console.log(`  Stake: ${ethers.formatEther(details[1])} STT`)
+        console.log(`  Reputation: ${details[2]} (starts at 50)`)
+        console.log(`  Status: Active`)
+        
+        console.log('\n✅ Oracle is ready to verify tasks!')
+      } else {
+        console.error('❌ Registration failed - transaction reverted')
+      }
+    } catch (txError: any) {
+      if (txError.reason) {
+        console.error(`❌ Transaction reverted: ${txError.reason}`)
+      } else if (txError.data) {
+        // Try to decode the revert reason
+        try {
+          const reason = ethers.toUtf8String(txError.data.slice(138))
+          console.error(`❌ Transaction reverted: ${reason}`)
+        } catch {
+          console.error(`❌ Transaction reverted: ${txError.message}`)
+        }
+      } else {
+        console.error(`❌ Transaction failed: ${txError.message}`)
+      }
+      throw txError
     }
     
   } catch (error: any) {

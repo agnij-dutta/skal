@@ -62,13 +62,17 @@ export function useAddLiquidity() {
   ) => {
     const amountAWei = parseEther(amountA)
     const amountBWei = parseEther(amountB) // Both amounts should be in STT (same token)
-    
+    // NOTE: On Somnia AMM, tokenA is native (ETH/STT) and tokenB is ERC-20 for most markets.
+    // The contract requires msg.value to equal the native side only when native is present.
+    // Passing amountA + amountB as value causes an ETH amount mismatch revert when tokenB is ERC-20.
+
     return writeContract({
       address: AMM_ENGINE_ADDRESS,
       abi: AMM_ENGINE_ABI,
       functionName: 'addLiquidity',
       args: [BigInt(marketId), amountAWei, amountBWei],
-      value: amountAWei + amountBWei, // Native-only pool: send both amounts as value
+      // Send only amountA as value (tokenA native). If both sides are native, backend config can update this.
+      value: amountAWei,
     })
   }
 

@@ -27,7 +27,7 @@ interface VerificationTask {
   taskId: number
   cid: string
   startTime: number
-  status: 'pending' | 'submitted' | 'finalized'
+  status: 'pending' | 'processing' | 'submitted' | 'finalized'
 }
 
 export class OracleNodeService extends BaseService {
@@ -187,42 +187,176 @@ export class OracleNodeService extends BaseService {
    * Setup event listeners for task reveals
    */
   private setupEventListeners(): void {
-    // Listen for TaskRevealed events
-    this.commitRegistry.on('TaskRevealed', async (taskId, cid, event) => {
-      this.logActivity(`TaskRevealed detected: Task ${taskId} with CID ${cid}`)
-      
-      // Add to verification queue
-      this.verificationQueue.set(Number(taskId), {
-        taskId: Number(taskId),
-        cid,
-        startTime: Date.now(),
-        status: 'pending'
-      })
-      
-      // Start verification process
-      await this.verifyTask(Number(taskId), cid)
-    })
+    // Use polling instead of filters to avoid "too many filters" error
+    this.startTaskRevealedPolling()
+    this.startVerificationPolling()
+  }
 
-    // Listen for verification submissions from other oracles
-    this.verificationAggregator.on('VerificationSubmitted', async (taskId, verifier, score, event) => {
-      if (verifier.toLowerCase() !== this.wallet!.address.toLowerCase()) {
-        this.logActivity(`Other oracle submitted for task ${taskId}: Score ${score}`)
+  private startTaskRevealedPolling(): void {
+    let lastProcessedBlock = 0
+    const processedEvents = new Set<string>()
+    
+    const poll = async () => {
+      try {
+        const currentBlock = await this.provider.getBlockNumber()
+        const fromBlock = lastProcessedBlock || Math.max(0, currentBlock - 200) // Look back 200 blocks
         
-        // Check if we should submit too
-        const task = this.verificationQueue.get(Number(taskId))
-        if (task && task.status === 'pending') {
-          this.logActivity(`Need to submit our verification for task ${taskId}`)
+        const eventTopic = this.commitRegistry.interface.getEvent('TaskRevealed')!.topicHash
+        const logs = await this.provider.getLogs({
+          address: this.config.contractAddresses.commitRegistry,
+          topics: [eventTopic],
+          fromBlock,
+          toBlock: currentBlock
+        })
+        
+        if (logs.length > 0) {
+          this.logActivity(`Found ${logs.length} TaskRevealed events in polling cycle`)
         }
-      }
-    })
+        
+        for (const log of logs) {
+          const eventId = `${log.blockNumber}-${log.transactionHash}-${log.index || 0}`
+          if (processedEvents.has(eventId)) continue
+          processedEvents.add(eventId)
+          
+          try {
+            const parsedEvent = this.commitRegistry.interface.parseLog(log)
+            if (parsedEvent && parsedEvent.args) {
+              const taskId = Number(parsedEvent.args.taskId)
+              const cid = parsedEvent.args.cid
+              
+              this.logActivity(`TaskRevealed detected: Task ${taskId} with CID ${cid} (Oracle: ${this.oracleId})`)
+              
+              // Check if we've already submitted for this task
+              try {
+                const submitTopic = this.verificationAggregator.interface.getEvent('VerificationSubmitted')!.topicHash
+                const submitLogs = await this.provider.getLogs({
+                  address: this.config.contractAddresses.verificationAggregator,
+                  topics: [submitTopic, null, this.wallet!.address.toLowerCase()],
+                  fromBlock: Math.max(0, currentBlock - 1000),
+                  toBlock: currentBlock
+                })
+                
+                const alreadySubmitted = submitLogs.some(log => {
+                  try {
+                    const parsed = this.verificationAggregator.interface.parseLog(log)
+                    return parsed && Number(parsed.args.taskId) === taskId
+                  } catch {
+                    return false
+                  }
+                })
+                
+                if (alreadySubmitted) {
+                  this.logActivity(`Oracle ${this.oracleId} already submitted for task ${taskId}, skipping`)
+                  continue
+                }
+              } catch (checkError) {
+                // If check fails, proceed anyway
+                this.logActivity(`⚠️  Could not check submission status, proceeding anyway`)
+              }
+              
+              // Skip if submission window already expired
+              try {
+                const timeRemaining = await this.verificationAggregator.getTimeRemaining(BigInt(taskId))
+                if (Number(timeRemaining) <= 0) {
+                  this.logActivity(`⏭️ Submission window expired for task ${taskId}, skipping`)
+                  continue
+                }
+              } catch {}
 
-    // Listen for consensus reached
-    this.verificationAggregator.on('TaskFinalized', async (taskId, finalScore, verifiers, event) => {
-      this.logActivity(`✅ Task ${taskId} finalized with score ${finalScore} by ${verifiers.length} oracles`)
+              // Check if task is already in queue
+              if (!this.verificationQueue.has(taskId)) {
+                this.verificationQueue.set(taskId, {
+                  taskId,
+                  cid,
+                  startTime: Date.now(),
+                  status: 'pending'
+                })
+                // Don't await to allow parallel processing
+                this.verifyTask(taskId, cid).catch(err => {
+                  this.logError(err as Error, `Failed to verify task ${taskId}`)
+                })
+              } else {
+                this.logActivity(`Task ${taskId} already in verification queue, skipping`)
+              }
+            }
+          } catch (parseError) {
+            this.logError(parseError as Error, `Failed to parse TaskRevealed event`)
+            continue
+          }
+        }
+        
+        lastProcessedBlock = currentBlock + 1
+      } catch (error) {
+        this.logError(error as Error, 'Failed to poll for TaskRevealed events')
+      }
       
-      // Clean up from queue
-      this.verificationQueue.delete(Number(taskId))
-    })
+      setTimeout(poll, 5000)
+    }
+    
+    poll()
+  }
+
+  private startVerificationPolling(): void {
+    let lastProcessedBlock = 0
+    const processedEvents = new Set<string>()
+    
+    const poll = async () => {
+      try {
+        const currentBlock = await this.provider.getBlockNumber()
+        const fromBlock = lastProcessedBlock || Math.max(0, currentBlock - 100)
+        
+        const submitTopic = this.verificationAggregator.interface.getEvent('VerificationSubmitted')!.topicHash
+        const finalizeTopic = this.verificationAggregator.interface.getEvent('TaskFinalized')!.topicHash
+        
+        const logs = await this.provider.getLogs({
+          address: this.config.contractAddresses.verificationAggregator,
+          topics: [[submitTopic, finalizeTopic]],
+          fromBlock,
+          toBlock: currentBlock
+        })
+        
+        for (const log of logs) {
+          const eventId = `${log.blockNumber}-${log.transactionHash}-${log.index || 0}`
+          if (processedEvents.has(eventId)) continue
+          processedEvents.add(eventId)
+          
+          try {
+            const parsedEvent = this.verificationAggregator.interface.parseLog(log)
+            if (parsedEvent) {
+              if (parsedEvent.name === 'VerificationSubmitted') {
+                const taskId = Number(parsedEvent.args.taskId)
+                const verifier = parsedEvent.args.verifier
+                const score = parsedEvent.args.score
+                
+                if (verifier.toLowerCase() !== this.wallet!.address.toLowerCase()) {
+                  this.logActivity(`Other oracle submitted for task ${taskId}: Score ${score}`)
+                  const task = this.verificationQueue.get(taskId)
+                  if (task && task.status === 'pending') {
+                    this.logActivity(`Need to submit our verification for task ${taskId}`)
+                  }
+                }
+              } else if (parsedEvent.name === 'TaskFinalized') {
+                const taskId = Number(parsedEvent.args.taskId)
+                const finalScore = parsedEvent.args.finalScore
+                const verifiers = parsedEvent.args.verifiers
+                this.logActivity(`✅ Task ${taskId} finalized with score ${finalScore} by ${verifiers.length} oracles`)
+                this.verificationQueue.delete(taskId)
+              }
+            }
+          } catch (parseError) {
+            continue
+          }
+        }
+        
+        lastProcessedBlock = currentBlock + 1
+      } catch (error) {
+        this.logError(error as Error, 'Failed to poll for verification events')
+      }
+      
+      setTimeout(poll, 5000)
+    }
+    
+    poll()
   }
 
   /**
@@ -234,7 +368,7 @@ export class OracleNodeService extends BaseService {
       this.logActivity('Checking for existing revealed tasks...')
       
       const currentBlock = await this.provider.getBlockNumber()
-      const lookbackBlocks = 5000 // Look back 5000 blocks
+      const lookbackBlocks = 800 // tighten lookback to prioritize fresh tasks
       const chunkSize = 900 // Stay under 1000 block limit
       const startBlock = Math.max(0, currentBlock - lookbackBlocks)
       
@@ -290,27 +424,88 @@ export class OracleNodeService extends BaseService {
           const taskId = Number(event.args.taskId)
           const cid = event.args.cid || ''
           
+          // Skip if already in queue
+          if (this.verificationQueue.has(taskId)) {
+            continue
+          }
+          
           // Check if already submitted or finalized
           try {
-            const submissionCount = await this.verificationAggregator.getSubmissionCount(taskId)
-            const hasConsensus = await this.verificationAggregator.hasConsensus(taskId)
+            const hasConsensus = await this.verificationAggregator.hasConsensus(BigInt(taskId))
             
-            if (!hasConsensus && submissionCount < 3) {
-              this.logActivity(`Found unfinished task ${taskId}, adding to queue`)
-              this.verificationQueue.set(taskId, {
-                taskId,
-                cid,
-                startTime: Date.now(),
-                status: 'pending'
+            if (hasConsensus) {
+              this.logActivity(`Task ${taskId} already has consensus, skipping`)
+              continue
+            }
+            // Skip if submission window expired
+            try {
+              const timeRemaining = await this.verificationAggregator.getTimeRemaining(BigInt(taskId))
+              if (Number(timeRemaining) <= 0) {
+                this.logActivity(`⏭️ Submission window expired for task ${taskId}, skipping from historical scan`)
+                continue
+              }
+            } catch {}
+            
+            // Check if this oracle has already submitted
+            try {
+              // Check if we've already submitted by looking at recent VerificationSubmitted events
+              const submitTopic = this.verificationAggregator.interface.getEvent('VerificationSubmitted')!.topicHash
+              const submitLogs = await this.provider.getLogs({
+                address: this.config.contractAddresses.verificationAggregator,
+                topics: [submitTopic, null, this.wallet!.address.toLowerCase()],
+                fromBlock: Math.max(0, currentBlock - 1000),
+                toBlock: currentBlock
               })
               
-              // Verify it
-              if (cid) {
-                await this.verifyTask(taskId, cid)
+              const alreadySubmitted = submitLogs.some(log => {
+                try {
+                  const parsed = this.verificationAggregator.interface.parseLog(log)
+                  return parsed && Number(parsed.args.taskId) === taskId
+                } catch {
+                  return false
+                }
+              })
+              
+              if (alreadySubmitted) {
+                this.logActivity(`Oracle ${this.oracleId} already submitted for task ${taskId}, skipping`)
+                continue
               }
+            } catch (checkError) {
+              // If we can't check, proceed anyway - better to try than skip
+              this.logActivity(`⚠️  Could not check if already submitted for task ${taskId}, proceeding anyway`)
             }
-          } catch (checkError) {
+            
+            // Check task state - should be Revealed (1)
+            try {
+              const task = await this.commitRegistry.getTask(BigInt(taskId))
+              const taskState = Number(task.state)
+              if (taskState !== 1) {
+                this.logActivity(`Task ${taskId} is not in Revealed state (state=${taskState}), skipping`)
+                continue
+              }
+            } catch (taskError) {
+              this.logActivity(`⚠️  Could not check task state for ${taskId}, skipping`)
+              continue
+            }
+            
+            // Good to verify - add to queue and verify
+            this.logActivity(`🔍 Found revealed task ${taskId} that needs verification, adding to queue`)
+            this.verificationQueue.set(taskId, {
+              taskId,
+              cid,
+              startTime: Date.now(),
+              status: 'pending'
+            })
+            
+            // Verify it (don't await to allow parallel processing)
+            if (cid) {
+              this.verifyTask(taskId, cid).catch(err => {
+                this.logError(err as Error, `Failed to verify task ${taskId} from historical scan`)
+              })
+            }
+          } catch (checkError: any) {
             // Skip tasks that can't be checked (might not exist or contract error)
+            this.logActivity(`⚠️  Error checking task ${taskId}: ${checkError.message}`)
             continue
           }
         }
@@ -330,6 +525,18 @@ export class OracleNodeService extends BaseService {
       return
     }
 
+    // Check if already in queue with processing status
+    const queueEntry = this.verificationQueue.get(taskId)
+    if (queueEntry && queueEntry.status === 'processing') {
+      this.logActivity(`Task ${taskId} already being processed, skipping duplicate`)
+      return
+    }
+    
+    // Mark as processing
+    if (queueEntry) {
+      queueEntry.status = 'processing'
+    }
+
     // Proceed even if not registered; registry may be optional on Somnia
     if (!this.isRegistered) {
       this.logActivity(`⚠️  Oracle ${this.oracleId} not registered; proceeding with verification anyway`)
@@ -338,6 +545,15 @@ export class OracleNodeService extends BaseService {
     try {
       this.logActivity(`🧠 AI-powered verification for task ${taskId} with CID ${cid} (Oracle: ${this.oracleId})`)
       
+      // Ensure submission window is still open before doing heavy work
+      try {
+        const timeRemaining = await this.verificationAggregator.getTimeRemaining(BigInt(taskId))
+        if (Number(timeRemaining) <= 0) {
+          this.logActivity(`⏭️ Submission window expired for task ${taskId}, skipping verification`)
+          return
+        }
+      } catch {}
+
       // 1. Fetch and decrypt data from IPFS
       const data = await this.fetchDataFromIPFS(cid)
       
@@ -361,7 +577,15 @@ export class OracleNodeService extends BaseService {
       )
       
       this.logActivity(`AI Verification (${this.oracleId}): Task ${taskId} scored ${verificationScore} | Quality: ${qualityAnalysis.score} | Alignment: ${alignmentScore}`)
-      // Emit structured verification result and raw data for parsing
+      // Parse and format revealed data for better readability
+      let parsedData = data
+      try {
+        if (typeof data === 'string') {
+          parsedData = this.parseJSONFromAIResponse(data)
+        }
+      } catch {}
+      
+      // Emit structured verification result and parsed data
       console.log(JSON.stringify({
         type: 'oracle_verification',
         oracleId: this.oracleId,
@@ -373,7 +597,8 @@ export class OracleNodeService extends BaseService {
           alignmentScore,
           details: (qualityAnalysis as any).notes || (qualityAnalysis as any).details || null
         },
-        data
+        revealedData: parsedData,
+        rawData: data
       }, null, 2))
       
       // 5. Submit verification to aggregator
@@ -402,6 +627,28 @@ export class OracleNodeService extends BaseService {
       // Generate signature (simple approach - sign the score)
       const message = ethers.solidityPackedKeccak256(['uint256', 'uint8'], [taskId, score])
       const signature = await this.wallet.signMessage(ethers.getBytes(message))
+      
+      // Final window check just-in-time
+      try {
+        const timeRemaining = await this.verificationAggregator.getTimeRemaining(BigInt(taskId))
+        if (Number(timeRemaining) <= 0) {
+          this.logActivity(`⏭️ Submission window expired for task ${taskId} (final check), skipping`)
+          return
+        }
+      } catch {}
+
+      // Static simulate to catch late reverts (e.g., window expired)
+      try {
+        await (this.verificationAggregator.connect(this.wallet) as any).submitVerification.staticCall(
+          BigInt(taskId),
+          score,
+          signature
+        )
+      } catch (simError: any) {
+        const reason = this.decodeRevertReason(simError)
+        this.logActivity(`⚠️  Verification simulation reverted for task ${taskId}: ${reason}`)
+        return
+      }
       
       const tx = await (this.verificationAggregator.connect(this.wallet) as any).submitVerification(
         BigInt(taskId),
@@ -498,7 +745,8 @@ export class OracleNodeService extends BaseService {
     let score = 0.5
     
     try {
-      const parsed = JSON.parse(data)
+      // Use improved JSON parsing
+      const parsed = typeof data === 'string' ? this.parseJSONFromAIResponse(data) : data
       
       const requiredFields = expectations.requiredFields || []
       const presentFields = requiredFields.filter((field: string) => parsed.hasOwnProperty(field))

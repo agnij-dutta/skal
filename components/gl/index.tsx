@@ -3,7 +3,7 @@
 import { Perf } from "r3f-perf";
 import { Effects } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
-import { useControls } from "leva";
+import { Leva, useControls } from "leva";
 import { Particles } from "./particles";
 import { VignetteShader } from "./shaders/vignetteShader";
 import { useGL } from "./context";
@@ -47,6 +47,8 @@ export const GL = () => {
   });
   return (
     <div id="webgl">
+      {/* Hide the Leva control panel (particle system modal) by default */}
+      <Leva hidden />
       <Canvas
         camera={{
           position: [

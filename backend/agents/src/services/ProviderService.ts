@@ -10,6 +10,7 @@ export class ProviderService extends BaseService {
   private intervalId: NodeJS.Timeout | null = null
   private taskInterval: number = 30000 // 30 seconds
   private taskCids: Map<number, string> = new Map() // Store CIDs for tasks
+  private revealingTasks: Set<number> = new Set() // Track tasks being revealed to prevent duplicates
 
   constructor(serviceConfig: ServiceConfig) {
     super(serviceConfig)
@@ -43,8 +44,12 @@ export class ProviderService extends BaseService {
       // Listen for events
       this.setupEventListeners()
       
-      // Start periodic check for tasks that need revelation
-      this.startRevelationCheck()
+      // Optional periodic reveal (can cause races). Gate by env flag.
+      if (process.env.DISABLE_PERIODIC_REVEAL !== 'true') {
+        this.startRevelationCheck()
+      } else {
+        this.logActivity('Periodic revelation disabled by DISABLE_PERIODIC_REVEAL=true')
+      }
       
     } catch (error) {
       this.logError(error as Error, 'Failed to start provider service')
@@ -93,16 +98,34 @@ export class ProviderService extends BaseService {
       // Check all tasks we have CIDs for
       for (const [taskId, cid] of this.taskCids.entries()) {
         try {
-          // Check if task has been purchased (has funds locked)
-          const task = await this.commitRegistry.getTask(taskId)
+          // Check task state from contract
+          const task = await this.commitRegistry.getTask(BigInt(taskId))
+          const taskState = Number(task.state)
           
-          // If task exists and has been purchased but not revealed yet
-          if (task && !task.revealed) {
-            this.logActivity(`🔍 Found unrevealed task ${taskId} with CID ${cid}, checking if purchased...`)
+          // TaskState: 0=Committed, 1=Revealed, 2=Validated, 3=Settled, 4=Disputed
+          if (taskState === 1) {
+            // Task is already revealed, remove from pending list
+            this.taskCids.delete(taskId)
+            this.logActivity(`✅ Task ${taskId} already revealed, removed from pending list`)
+            continue
+          }
+          
+          if (taskState !== 0) {
+            // Task is not in committed state, skip
+            continue
+          }
+          
+          // Task is committed, check if escrow exists (buyer has purchased)
+          try {
+            const escrow = await this.escrowManager.getEscrow(BigInt(taskId))
+            if (!escrow || escrow.buyer === ethers.ZeroAddress) {
+              // No buyer yet, wait for purchase
+              this.logActivity(`⏳ Task ${taskId} not purchased yet, waiting for buyer...`)
+              continue
+            }
             
-            // Check if there are any funds locked for this task
-            // We'll reveal if the task exists and we have a CID for it
-            this.logActivity(`🎯 Revealing task ${taskId} with CID ${cid}`)
+            // Escrow exists and has a buyer - safe to reveal
+            this.logActivity(`🔍 Found unrevealed task ${taskId} with CID ${cid}, buyer has purchased, revealing...`)
             const success = await this.revealTask(taskId)
             
             // If revelation was successful, remove from pending list
@@ -110,10 +133,14 @@ export class ProviderService extends BaseService {
               this.taskCids.delete(taskId)
               this.logActivity(`✅ Task ${taskId} revealed successfully, removed from pending list`)
             }
-          } else if (task && task.revealed) {
-            // Task is already revealed, remove from pending list
-            this.taskCids.delete(taskId)
-            this.logActivity(`✅ Task ${taskId} already revealed, removed from pending list`)
+          } catch (escrowError: any) {
+            // Escrow doesn't exist yet - this is expected, wait for buyer
+            if (escrowError.message?.includes('Escrow does not exist')) {
+              this.logActivity(`⏳ Task ${taskId} escrow not created yet, waiting for buyer purchase...`)
+            } else {
+              this.logActivity(`⚠️  Could not check escrow for task ${taskId}: ${escrowError.message}`)
+            }
+            continue
           }
         } catch (error) {
           // Task might not exist or error occurred, continue with next task
@@ -182,16 +209,38 @@ export class ProviderService extends BaseService {
       historicalSuccessRate: await this.getHistoricalPerformance().then(p => p.averageScore / 100)
     }
   }, await this.provider.getBalance(this.wallet!.address))
+      
+      // Ensure minimum stake (0.01 ether = 10000000000000000 wei)
+      const MIN_STAKE = ethers.parseEther('0.01')
+      let finalStake = optimalStake < MIN_STAKE ? MIN_STAKE : optimalStake
+      
+      // Check if we have enough balance (stake + gas)
+      const balance = await this.provider.getBalance(this.wallet!.address)
+      const estimatedGas = ethers.parseUnits('0.001', 'ether') // Rough gas estimate
+      if (balance < finalStake + estimatedGas) {
+        this.logActivity(`⚠️  Insufficient balance: have ${ethers.formatEther(balance)} STT, need ${ethers.formatEther(finalStake + estimatedGas)} STT`)
+        this.logActivity(`💧 Attempting to fund wallet...`)
+        await this.ensureFunding(this.wallet!.address)
+        // Re-check balance after funding
+        const newBalance = await this.provider.getBalance(this.wallet!.address)
+        if (newBalance < finalStake + estimatedGas) {
+          this.logError(new Error('Insufficient balance even after funding'), 'Cannot commit task')
+          return
+        }
+      }
+      
       console.log(JSON.stringify({
         type: 'ai_optimal_stake',
-        stakeWei: optimalStake.toString()
+        stakeWei: finalStake.toString(),
+        stakeEth: ethers.formatEther(finalStake),
+        balance: ethers.formatEther(balance)
       }, null, 2))
       
       // 5. Upload and commit
       const cid = await this.uploadToStorage(intelligentData.data)
       const commitHash = ethers.keccak256(ethers.toUtf8Bytes(cid + Date.now()))
       
-      const taskId = await this.commitTaskToBlockchain(commitHash, taskParams.marketId, optimalStake)
+      const taskId = await this.commitTaskToBlockchain(commitHash, taskParams.marketId, finalStake)
       console.log(JSON.stringify({
         type: 'provider_committed_task',
         taskId,
@@ -275,25 +324,77 @@ export class ProviderService extends BaseService {
   }
 
   private setupEventListeners(): void {
-    // Listen for FundsLocked events to automatically reveal tasks
-    this.escrowManager.on('FundsLocked', async (taskId, buyer, provider, amount, timestamp, event) => {
-      try {
-        const taskIdNum = Number(taskId)
-        this.logActivity(`🔓 FundsLocked event received: task ${taskIdNum} by ${buyer}, provider ${provider}, amount ${amount}`)
-        
-        // Only reveal if this provider created the task
-        if (provider.toLowerCase() === this.wallet!.address.toLowerCase()) {
-          this.logActivity(`🎯 This is our task! Revealing task ${taskIdNum}...`)
-          await this.revealTask(taskIdNum)
-        } else {
-          this.logActivity(`⏭️ Task ${taskIdNum} belongs to different provider ${provider}, skipping`)
-        }
-      } catch (error) {
-        this.logError(error as Error, `Failed to handle FundsLocked event for task ${taskId}`)
-      }
-    })
-    
+    // Use polling instead of filters to avoid "too many filters" error
+    this.startFundsLockedPolling()
     this.logActivity('Event listeners set up - will auto-reveal tasks when funds are locked')
+  }
+
+  private startFundsLockedPolling(): void {
+    let lastProcessedBlock = 0
+    const processedEvents = new Set<string>()
+    
+    const poll = async () => {
+      try {
+        const currentBlock = await this.provider.getBlockNumber()
+        const fromBlock = lastProcessedBlock || Math.max(0, currentBlock - 100)
+        
+        const eventTopic = this.escrowManager.interface.getEvent('FundsLocked')!.topicHash
+        const logs = await this.provider.getLogs({
+          address: this.config.contractAddresses.escrowManager,
+          topics: [eventTopic],
+          fromBlock,
+          toBlock: currentBlock
+        })
+        
+        for (const log of logs) {
+          const eventId = `${log.blockNumber}-${log.transactionHash}-${log.index || 0}`
+          if (processedEvents.has(eventId)) continue
+          processedEvents.add(eventId)
+          
+          try {
+            const parsedEvent = this.escrowManager.interface.parseLog(log)
+            if (parsedEvent && parsedEvent.args) {
+              const taskId = Number(parsedEvent.args.taskId)
+              const buyer = parsedEvent.args.buyer
+              const amount = parsedEvent.args.amount
+              
+              // Get provider from CommitRegistry (FundsLocked event has provider as address(0))
+              let provider = ethers.ZeroAddress
+              try {
+                const task = await this.commitRegistry.getTask(BigInt(taskId))
+                provider = task.provider
+              } catch (e) {
+                // Task might not exist yet, skip
+                continue
+              }
+              
+              this.logActivity(`🔓 FundsLocked event received: task ${taskId} by ${buyer}, provider ${provider}, amount ${amount}`)
+              
+              // Only reveal if this provider created the task
+              if (provider.toLowerCase() === this.wallet!.address.toLowerCase()) {
+                this.logActivity(`🎯 This is our task! Funds locked, settling briefly then revealing task ${taskId}...`)
+                // Short settle to avoid missing tight reveal windows
+                await new Promise(resolve => setTimeout(resolve, 250))
+                await this.revealTask(taskId)
+              } else {
+                this.logActivity(`⏭️ Task ${taskId} belongs to different provider ${provider}, skipping`)
+              }
+            }
+          } catch (parseError) {
+            continue
+          }
+        }
+        
+        lastProcessedBlock = currentBlock + 1
+      } catch (error) {
+        this.logError(error as Error, 'Failed to poll for FundsLocked events')
+      }
+      
+      // Poll every 5 seconds
+      setTimeout(poll, 5000)
+    }
+    
+    poll()
   }
 
   private async revealTask(taskId: number): Promise<boolean> {
@@ -302,6 +403,14 @@ export class ProviderService extends BaseService {
       return false
     }
 
+    // Prevent concurrent reveal attempts for the same task
+    if (this.revealingTasks.has(taskId)) {
+      this.logActivity(`⏳ Task ${taskId} is already being revealed, skipping duplicate attempt`)
+      return false
+    }
+
+    this.revealingTasks.add(taskId)
+
     try {
       this.logActivity(`Revealing task ${taskId}...`)
       
@@ -309,37 +418,132 @@ export class ProviderService extends BaseService {
       const cid = this.taskCids.get(taskId)
       if (!cid) {
         this.logError(new Error(`No CID found for task ${taskId}`), 'Cannot reveal task without CID')
+        this.revealingTasks.delete(taskId)
         return false
       }
       
       this.logActivity(`Using stored CID ${cid} for task ${taskId}`)
 
-      // Preflight: ensure escrow state is locked (0) and simulate reveal to catch reverts
+      // First, check task state from the contract using canReveal function
       try {
-        const escrowState = await this.escrowManager.getEscrowState(BigInt(taskId))
-        if (Number(escrowState) !== 0) {
-          this.logActivity(`⏳ Escrow not locked yet for task ${taskId} (state=${escrowState}), will retry later`)
+        const task = await this.commitRegistry.getTask(BigInt(taskId))
+        const taskState = Number(task.state)
+        const taskProvider = task.provider
+
+        // TaskState: 0=Committed, 1=Revealed, 2=Validated, 3=Settled, 4=Disputed
+        if (taskState !== 0) {
+          this.logActivity(`⏳ Task ${taskId} is not in Committed state (state=${taskState}), skipping reveal`)
+          this.revealingTasks.delete(taskId)
           return false
         }
-        
-        // Also check if task has been purchased (has buyer)
+
+        // Check if we're the provider
+        if (taskProvider.toLowerCase() !== this.wallet.address.toLowerCase()) {
+          this.logActivity(`⏳ Task ${taskId} belongs to different provider ${taskProvider}, skipping`)
+          this.revealingTasks.delete(taskId)
+          return false
+        }
+
+        // Use contract's canReveal function for accurate deadline check
+        try {
+          const canReveal = await this.commitRegistry.canReveal(BigInt(taskId))
+          if (!canReveal) {
+            this.logActivity(`⏳ Task ${taskId} cannot be revealed (deadline may have passed or state changed)`)
+            this.revealingTasks.delete(taskId)
+            return false
+          }
+        } catch (canRevealError: any) {
+          this.logActivity(`⚠️  Could not check canReveal for task ${taskId}: ${canRevealError.message}`)
+          // Fallback to manual deadline check
+          const currentTime = Math.floor(Date.now() / 1000)
+          const revealDeadline = Number(task.revealDeadline)
+          if (currentTime > revealDeadline - 10) {
+            this.logActivity(`⏳ Reveal deadline passed for task ${taskId} (deadline=${revealDeadline}, now=${currentTime})`)
+            this.revealingTasks.delete(taskId)
+            return false
+          }
+        }
+
+        this.logActivity(`✅ Task ${taskId} state check passed: Committed, provider matches, canReveal OK`)
+      } catch (e: any) {
+        this.logActivity(`⚠️  Could not check task state for task ${taskId}: ${e.message}`)
+        this.revealingTasks.delete(taskId)
+        return false
+      }
+
+      // Optional: Check escrow (but don't block reveal if escrow doesn't exist yet)
+      try {
         const escrow = await this.escrowManager.getEscrow(BigInt(taskId))
-        if (!escrow || escrow.buyer === ethers.ZeroAddress) {
-          this.logActivity(`⏳ Task ${taskId} has no buyer yet, waiting for purchase...`)
+        if (escrow && escrow.buyer !== ethers.ZeroAddress) {
+          const escrowState = Number(escrow.state)
+          this.logActivity(`📦 Escrow exists for task ${taskId}, state=${escrowState} (0=Locked, 1=Released, 2=Disputed, 3=Refunded)`)
+        } else {
+          this.logActivity(`📦 No escrow yet for task ${taskId}, but proceeding with reveal anyway`)
+        }
+      } catch (e: any) {
+        // Escrow doesn't exist yet - that's OK, we can still reveal
+        this.logActivity(`📦 Escrow check skipped for task ${taskId}: ${e.message}`)
+      }
+
+      // Re-check state right before sending to catch any race conditions
+      try {
+        const canReveal = await this.commitRegistry.canReveal(BigInt(taskId))
+        if (!canReveal) {
+          this.logActivity(`⏳ Task ${taskId} canReveal changed to false, skipping reveal`)
+          this.revealingTasks.delete(taskId)
           return false
         }
       } catch (e: any) {
-        this.logActivity(`⚠️  Could not check escrow state for task ${taskId}: ${e.message}`)
-        return false
+        this.logActivity(`⚠️  Could not re-check canReveal: ${e.message}`)
       }
 
       // Static call to surface revert reasons before sending
       try {
         await (this.commitRegistry.connect(this.wallet) as any).revealTask.staticCall(BigInt(taskId), cid)
+        this.logActivity(`✅ Reveal simulation passed for task ${taskId}`)
       } catch (simError: any) {
-        this.logActivity(`⚠️  Reveal simulation reverted for task ${taskId}: ${simError?.shortMessage || simError?.message || simError}`)
+        const reason = this.decodeRevertReason(simError)
+        this.logActivity(`⚠️  Reveal simulation reverted for task ${taskId}: ${reason}`)
+        this.revealingTasks.delete(taskId)
         // Backoff and retry later
         setTimeout(() => this.revealTask(taskId).catch(() => {}), 30000)
+        return false
+      }
+      
+      // Get fresh nonce for reveal
+      const nonce = await this.provider.getTransactionCount(this.wallet.address, 'pending')
+      
+      // Double-check task state one more time right before sending
+      let canStillReveal = false
+      try {
+        const task = await this.commitRegistry.getTask(BigInt(taskId))
+        const finalState = Number(task.state)
+        const finalCanReveal = await this.commitRegistry.canReveal(BigInt(taskId))
+        
+        if (finalState !== 0 || !finalCanReveal || task.provider.toLowerCase() !== this.wallet.address.toLowerCase()) {
+          this.logActivity(`⏳ Task ${taskId} state changed before reveal (state=${finalState}, canReveal=${finalCanReveal}), aborting`)
+          this.revealingTasks.delete(taskId)
+          return false
+        }
+        canStillReveal = true
+      } catch (e: any) {
+        this.logActivity(`⚠️  Could not final check task state: ${e.message}`)
+        // If we can't check, proceed anyway since static call passed
+        canStillReveal = true
+      }
+      
+      if (!canStillReveal) {
+        this.revealingTasks.delete(taskId)
+        return false
+      }
+      
+      // Final static call right before sending to catch any last-second changes
+      try {
+        await (this.commitRegistry.connect(this.wallet) as any).revealTask.staticCall(BigInt(taskId), cid)
+      } catch (finalSimError: any) {
+        const reason = this.decodeRevertReason(finalSimError)
+        this.logActivity(`⚠️  Final reveal simulation failed for task ${taskId}: ${reason}`)
+        this.revealingTasks.delete(taskId)
         return false
       }
       
@@ -347,8 +551,8 @@ export class ProviderService extends BaseService {
         BigInt(taskId),
         cid,
         {
-          gasLimit: 300000, // Increased gas limit
-          nonce: await this.provider.getTransactionCount(this.wallet.address, 'pending')
+          gasLimit: 300000,
+          nonce
         }
       )
 
@@ -356,22 +560,28 @@ export class ProviderService extends BaseService {
       
       const receipt = await this.waitForTransaction(tx.hash)
       if (receipt && receipt.status === 1) {
-        this.logActivity(`Task reveal confirmed in block ${receipt.blockNumber}`)
+        this.logActivity(`✅ Task reveal confirmed in block ${receipt.blockNumber}`)
         this.orchestrator.forwardEvent('taskRevealed', {
           taskId,
           cid,
           txHash: tx.hash
         })
+        this.revealingTasks.delete(taskId)
         return true
       } else {
-        this.logError(new Error('Transaction failed'), `Task ${taskId} revelation failed`)
-        // Retry after short delay if it failed (chain could be lagging)
+        // Try to decode revert reason from receipt
+        const reason = await this.getRevertReasonFromReceipt(tx.hash, receipt)
+        this.logError(new Error(`Transaction failed: ${reason}`), `Task ${taskId} revelation failed`)
+        this.revealingTasks.delete(taskId)
+        // Retry after short delay if it failed
         setTimeout(() => this.revealTask(taskId).catch(() => {}), 30000)
         return false
       }
       
     } catch (error: any) {
-      this.logError(error as Error, `Failed to reveal task ${taskId}`)
+      const reason = this.decodeRevertReason(error)
+      this.logError(new Error(`Failed to reveal task ${taskId}: ${reason}`), `Reveal error`)
+      this.revealingTasks.delete(taskId)
       // Retry with backoff to account for eventual consistency
       setTimeout(() => this.revealTask(taskId).catch(() => {}), 30000)
       return false
@@ -505,7 +715,7 @@ export class ProviderService extends BaseService {
     
     // Check for JSON structure
     try {
-      const parsed = JSON.parse(data)
+      const parsed = typeof data === 'string' ? this.parseJSONFromAIResponse(data) : data
       score += 0.2
       
       // Check for required fields
@@ -524,13 +734,43 @@ export class ProviderService extends BaseService {
 
   private async commitTaskToBlockchain(commitHash: string, marketId: number, stake: bigint): Promise<number> {
     try {
+      // Pre-flight check: ensure stake meets minimum and we have balance
+      const MIN_STAKE = ethers.parseEther('0.01')
+      if (stake < MIN_STAKE) {
+        throw new Error(`Stake ${ethers.formatEther(stake)} STT is below minimum ${ethers.formatEther(MIN_STAKE)} STT`)
+      }
+      
+      const balance = await this.provider.getBalance(this.wallet!.address)
+      if (balance < stake) {
+        throw new Error(`Insufficient balance: have ${ethers.formatEther(balance)} STT, need ${ethers.formatEther(stake)} STT`)
+      }
+      
+      // Static call to check for revert reasons
+      try {
+        await (this.commitRegistry.connect(this.wallet!) as any).commitTask.staticCall(
+          commitHash,
+          BigInt(marketId),
+          stake,
+          {
+            value: stake
+          }
+        )
+      } catch (simError: any) {
+        const reason = this.decodeRevertReason(simError)
+        throw new Error(`Pre-flight check failed: ${reason}`)
+      }
+      
+      // Get fresh nonce to avoid collisions
+      const nonce = await this.provider.getTransactionCount(this.wallet!.address, 'pending')
+      
       const tx = await (this.commitRegistry.connect(this.wallet!) as any).commitTask(
         commitHash,
         BigInt(marketId),
         stake,
         {
           gasLimit: 4000000,
-          value: stake
+          value: stake,
+          nonce
         }
       )
 

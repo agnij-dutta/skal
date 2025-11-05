@@ -35,6 +35,14 @@ export class BuyerService extends BaseService {
       
       this.logActivity('Buyer service started')
       
+      // Ensure funding immediately and periodically
+      try {
+        await this.ensureFunding(this.wallet!.address)
+      } catch {}
+      setInterval(() => {
+        this.ensureFunding(this.wallet!.address).catch(() => {})
+      }, 60000)
+      
       // Listen for new tasks
       this.setupEventListeners()
       
@@ -63,24 +71,58 @@ export class BuyerService extends BaseService {
   }
 
   private setupEventListeners(): void {
-      // Listen for new task commits
-    this.commitRegistry.on('TaskCommitted', async (taskId, commitHash, provider, marketId, stake, event) => {
-      this.logActivity(`New task committed: ${taskId} by ${provider}`)
-      
-      // Add to watched tasks
-      this.watchedTasks.add(Number(taskId))
-      
-      // Evaluate and potentially buy
-      await this.evaluateTask(Number(taskId), provider, BigInt(stake))
-    })
+    // Use polling instead of filters to avoid "too many filters" error
+    this.startTaskCommittedPolling()
+  }
 
-    // Listen for task reveals
-    this.commitRegistry.on('TaskRevealed', async (taskId, cid, event) => {
-      this.logActivity(`Task revealed: ${taskId} with CID ${cid}`)
+  private startTaskCommittedPolling(): void {
+    let lastProcessedBlock = 0
+    const processedEvents = new Set<string>()
+    
+    const poll = async () => {
+      try {
+        const currentBlock = await this.provider.getBlockNumber()
+        const fromBlock = lastProcessedBlock || Math.max(0, currentBlock - 100)
+        
+        const eventTopic = this.commitRegistry.interface.getEvent('TaskCommitted')!.topicHash
+        const logs = await this.provider.getLogs({
+          address: this.config.contractAddresses.commitRegistry,
+          topics: [eventTopic],
+          fromBlock,
+          toBlock: currentBlock
+        })
+        
+        for (const log of logs) {
+          const eventId = `${log.blockNumber}-${log.transactionHash}-${log.index || 0}`
+          if (processedEvents.has(eventId)) continue
+          processedEvents.add(eventId)
+          
+          try {
+            const parsedEvent = this.commitRegistry.interface.parseLog(log)
+            if (parsedEvent && parsedEvent.args) {
+              const taskId = Number(parsedEvent.args.taskId)
+              const provider = parsedEvent.args.provider
+              const stake = parsedEvent.args.stake
+              
+              this.logActivity(`New task committed: ${taskId} by ${provider}`)
+              this.watchedTasks.add(taskId)
+              await this.evaluateTask(taskId, provider, stake)
+            }
+          } catch (parseError) {
+            continue
+          }
+        }
+        
+        lastProcessedBlock = currentBlock + 1
+      } catch (error) {
+        this.logError(error as Error, 'Failed to poll for TaskCommitted events')
+      }
       
-      // Remove from watched tasks
-      this.watchedTasks.delete(Number(taskId))
-    })
+      // Poll every 5 seconds
+      setTimeout(poll, 5000)
+    }
+    
+    poll()
   }
 
   private async checkExistingTasks(): Promise<void> {
@@ -176,7 +218,13 @@ export class BuyerService extends BaseService {
       
       // 5. Determine optimal buy amount
       const balance = await this.provider.getBalance(this.wallet.address)
-      const buyAmount = await this.riskManager.determineOptimalStakeSize(taskData, balance)
+      let buyAmount = await this.riskManager.determineOptimalStakeSize(taskData, balance)
+      
+      // Ensure minimum buy amount (0.01 STT)
+      const minBuyAmount = ethers.parseEther('0.01')
+      if (buyAmount < minBuyAmount) {
+        buyAmount = minBuyAmount
+      }
       
       // 6. Execute decision - more aggressive buying strategy
       // Buy if: AI recommends AND (risk is acceptable OR confidence is very high)
@@ -204,13 +252,77 @@ export class BuyerService extends BaseService {
     }
 
     try {
+      const buyAmount = ethers.parseEther(amount)
+      
+      // Estimate gas for the transaction
+      let gasEstimate: bigint
+      let gasCost: bigint
+      try {
+        gasEstimate = await (this.escrowManager.connect(this.wallet) as any).lockFunds.estimateGas(
+          BigInt(taskId),
+          {
+            value: buyAmount
+          }
+        )
+        // Add 20% buffer for gas estimate
+        gasEstimate = (gasEstimate * BigInt(120)) / BigInt(100)
+        
+        // Get gas price
+        const feeData = await this.provider.getFeeData()
+        const gasPrice = feeData.gasPrice || feeData.maxFeePerGas || ethers.parseUnits('1', 'gwei')
+        gasCost = gasEstimate * gasPrice
+        
+        this.logActivity(`💰 Estimated gas: ${gasEstimate.toString()}, cost: ${ethers.formatEther(gasCost)} STT`)
+      } catch (gasError: any) {
+        // Fallback to safe estimate
+        gasEstimate = BigInt(4000000)
+        const feeData = await this.provider.getFeeData()
+        const gasPrice = feeData.gasPrice || feeData.maxFeePerGas || ethers.parseUnits('1', 'gwei')
+        gasCost = gasEstimate * gasPrice
+        this.logActivity(`⚠️  Gas estimation failed, using safe estimate: ${gasEstimate.toString()}, cost: ${ethers.formatEther(gasCost)} STT`)
+      }
+      
+      const balance = await this.provider.getBalance(this.wallet.address)
+      const totalNeeded = buyAmount + gasCost
+      
+      // Check if we have enough balance (buy amount + gas)
+      if (balance < totalNeeded) {
+        this.logActivity(`⚠️  Insufficient balance: have ${ethers.formatEther(balance)} STT, need ${ethers.formatEther(totalNeeded)} STT (buy: ${ethers.formatEther(buyAmount)}, gas: ${ethers.formatEther(gasCost)})`)
+        this.logActivity(`💧 Attempting to fund wallet before buying...`)
+        await this.ensureFunding(this.wallet.address)
+        // Wait a bit for funding to settle
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        // Re-check balance after funding
+        const newBalance = await this.provider.getBalance(this.wallet.address)
+        if (newBalance < totalNeeded) {
+          this.logError(new Error(`Insufficient balance even after funding: have ${ethers.formatEther(newBalance)} STT, need ${ethers.formatEther(totalNeeded)} STT`), 'Cannot buy task')
+          return
+        }
+        this.logActivity(`✅ Balance after funding: ${ethers.formatEther(newBalance)} STT`)
+      }
+
+      // Pre-flight check: simulate the transaction
+      try {
+        await (this.escrowManager.connect(this.wallet) as any).lockFunds.staticCall(
+          BigInt(taskId),
+          {
+            value: buyAmount
+          }
+        )
+        this.logActivity(`✅ Buy simulation passed for task ${taskId}`)
+      } catch (simError: any) {
+        const reason = this.decodeRevertReason(simError)
+        this.logActivity(`⚠️  Buy simulation reverted for task ${taskId}: ${reason}`)
+        throw new Error(`Pre-flight check failed: ${reason}`)
+      }
+
       this.logActivity(`Buying task ${taskId} for ${amount} ETH...`)
       
       const tx = await (this.escrowManager.connect(this.wallet) as any).lockFunds(
         BigInt(taskId),
         {
-          gasLimit: 4000000, // Increased gas limit based on contract requirements
-          value: ethers.parseEther(amount), // Send STT as escrow amount
+          gasLimit: gasEstimate, // Use estimated gas
+          value: buyAmount, // Send STT as escrow amount
           nonce: await this.provider.getTransactionCount(this.wallet.address, 'pending')
         }
       )
@@ -281,37 +393,79 @@ export class BuyerService extends BaseService {
 
   private async processDecryptedTaskData(taskId: number, data: any): Promise<void> {
     try {
+      // Parse data if it's a string (might be JSON string)
+      let parsedData = data
+      if (typeof data === 'string') {
+        try {
+          parsedData = this.parseJSONFromAIResponse(data)
+        } catch {
+          // If parsing fails, try to parse as regular JSON
+          try {
+            parsedData = JSON.parse(data)
+          } catch {
+            parsedData = { raw: data }
+          }
+        }
+      }
+      
       // Process the decrypted trading signal data
-      const pretty = (obj: any) => JSON.stringify(obj, null, 2)
       this.logActivity(`Processing decrypted data for task ${taskId}:`)
-      this.logActivity(`Signal type: ${data.prediction ? 'Price Prediction' : data.signal ? 'Trading Signal' : 'Unknown'}`)
       
-      if (data.prediction) {
-        this.logActivity(`Prediction: ${data.prediction}`)
-        this.logActivity(`Confidence: ${data.confidence}`)
-        this.logActivity(`Reasoning: ${data.reasoning}`)
+      // Extract key information
+      const signalType = parsedData.prediction ? 'Price Prediction' : 
+                        parsedData.signal_type ? 'Trading Signal' :
+                        parsedData.signal ? 'Trading Signal' : 'Unknown'
+      
+      this.logActivity(`Signal type: ${signalType}`)
+      
+      // Log prediction data
+      if (parsedData.prediction) {
+        this.logActivity(`Prediction: ${parsedData.prediction}`)
+      }
+      if (parsedData.predicted_outcome) {
+        this.logActivity(`Predicted Outcome: ${parsedData.predicted_outcome}`)
+      }
+      if (parsedData.direction) {
+        this.logActivity(`Direction: ${parsedData.direction}`)
+      }
+      if (parsedData.asset || parsedData.target) {
+        this.logActivity(`Asset: ${parsedData.asset || parsedData.target}`)
+      }
+      if (parsedData.entry_price || parsedData.suggested_entry_price) {
+        this.logActivity(`Entry Price: ${parsedData.entry_price || parsedData.suggested_entry_price}`)
+      }
+      if (parsedData.confidence || parsedData.prediction_confidence) {
+        this.logActivity(`Confidence: ${parsedData.confidence || parsedData.prediction_confidence}`)
+      }
+      if (parsedData.reasoning || parsedData.rationale || parsedData.explanation) {
+        const reasoning = parsedData.reasoning || parsedData.rationale || parsedData.explanation
+        this.logActivity(`Reasoning: ${reasoning.substring(0, 200)}${reasoning.length > 200 ? '...' : ''}`)
       }
       
-      if (data.signal) {
-        this.logActivity(`Signal: ${data.signal}`)
-        this.logActivity(`Asset: ${data.asset}`)
-        this.logActivity(`Price: ${data.price}`)
-        this.logActivity(`Confidence: ${data.confidence}`)
-      }
+      // Structured output for frontend/dev parsing
+      console.log(JSON.stringify({
+        type: 'buyer_decrypted_task',
+        taskId,
+        cid: parsedData.cid || 'unknown',
+        data: parsedData
+      }, null, 2))
       
-      // Also emit a structured blob for consumers
       console.log(JSON.stringify({
         type: 'buyer_decrypted_task_summary',
         taskId,
         summary: {
-          prediction: data.prediction ?? null,
-          signal: data.signal ?? null,
-          asset: data.asset ?? null,
-          price: data.price ?? null,
-          confidence: data.confidence ?? null,
-          reasoning: data.reasoning ?? null
+          signalType,
+          prediction: parsedData.prediction || parsedData.predicted_outcome || null,
+          signal: parsedData.signal || parsedData.signal_type || null,
+          asset: parsedData.asset || parsedData.target || null,
+          direction: parsedData.direction || null,
+          entryPrice: parsedData.entry_price || parsedData.suggested_entry_price || null,
+          stopLoss: parsedData.stop_loss || parsedData.suggested_stop_loss || null,
+          takeProfit: parsedData.take_profit || parsedData.suggested_take_profit || null,
+          confidence: parsedData.confidence || parsedData.prediction_confidence || null,
+          reasoning: parsedData.reasoning || parsedData.rationale || parsedData.explanation || null
         },
-        raw: data
+        raw: parsedData
       }, null, 2))
       
     } catch (error) {
